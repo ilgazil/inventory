@@ -1,0 +1,18 @@
+# MariaDB 10.6 locale pour le développement — même version majeure que la prod Example.
+services:
+  mariadb:
+    image: mariadb:10.6
+    container_name: REDACTED-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: REDACTED
+      MARIADB_USER: REDACTED
+      MARIADB_PASSWORD: REDACTED
+    ports:
+      # Port hôte 33060 pour ne pas entrer en conflit avec un MySQL/MariaDB local.
+      - "33060:3306"
+    volumes:
+      - REDACTED-mariadb-data:/var/lib/mysql
+
+volumes:
+  REDACTED-mariadb-data:

@@ -1,0 +1,26 @@
+{
+  "name": "Inventaire",
+  "short_name": "Inventaire",
+  "description": "Inventaire personnel — fonctionne hors-ligne, se synchronise dès la connexion.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#131419",
+  "theme_color": "#131419",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

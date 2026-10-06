@@ -1,0 +1,714 @@
+/* Inventaire — thème sombre unique, natif d'abord (cf. SPECS.md § 9). */
+
+/* ---------------------------------------------------------------- tokens */
+
+:root {
+  --bg: oklch(0.16 0.012 260);
+  --surface: oklch(0.21 0.014 260);
+  --surface-2: oklch(0.26 0.016 260);
+  --border: oklch(0.32 0.016 260);
+  --text: oklch(0.93 0.005 260);
+  --text-muted: oklch(0.65 0.012 260);
+  --accent: oklch(0.78 0.15 165);
+  --accent-ink: oklch(0.22 0.05 165);
+  --danger: oklch(0.68 0.19 25);
+  --danger-ink: oklch(0.92 0.03 25);
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ---------------------------------------------------------------- reset */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input,
+code {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ------------------------------------------------------------- structure */
+
+.app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main {
+  flex: 1;
+  width: min(100%, 40rem);
+  margin: 0 auto;
+  padding: 0.5rem 1rem calc(5rem + var(--safe-bottom));
+}
+
+.app-header {
+  padding: calc(0.75rem + var(--safe-top)) 1rem 0.5rem;
+  width: min(100%, 40rem);
+  margin: 0 auto;
+}
+
+.app-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-header-top h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ----------------------------------------------------------------- boutons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn--accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn--accent:hover {
+  background: oklch(0.83 0.14 165);
+}
+
+.btn--ghost {
+  border-color: var(--border);
+  color: var(--text);
+  background: transparent;
+}
+
+.btn--ghost:hover {
+  background: var(--surface-2);
+}
+
+.btn--danger {
+  background: var(--danger);
+  color: var(--danger-ink);
+}
+
+.btn--danger-ghost {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn--danger-ghost:hover {
+  background: oklch(0.68 0.19 25 / 0.12);
+}
+
+.btn--block {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ search */
+
+.search {
+  display: block;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-input:focus-visible {
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------- chips */
+
+.chips {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 1rem 0.5rem;
+  width: min(100%, 40rem);
+  margin: 0 auto;
+  scrollbar-width: thin;
+}
+
+.chip {
+  flex-shrink: 0;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+
+.chip--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* -------------------------------------------------------------------- list */
+
+.item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.item-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.75rem;
+}
+
+.item-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+  text-align: left;
+  padding: 0.25rem 0;
+}
+
+.item-name {
+  font-weight: 600;
+  font-size: 1.02rem;
+  overflow-wrap: anywhere;
+}
+
+.item-meta {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.item-edit {
+  color: var(--text-muted);
+  padding: 0.45rem;
+  border-radius: var(--radius-sm);
+}
+
+.item-edit:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+/* Quantité en ligne : grand écran uniquement */
+.item-qty {
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.item-qty-value {
+  min-width: 2.2ch;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+
+.btn-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0.35rem;
+  touch-action: manipulation;
+}
+
+.btn-step:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-step:disabled:hover {
+  border-color: var(--border);
+  color: inherit;
+}
+
+@media (min-width: 768px) {
+  .item-qty {
+    display: inline-flex;
+  }
+
+  .item-main {
+    cursor: pointer;
+  }
+
+  .item-main:hover .item-name {
+    color: var(--accent);
+  }
+}
+
+/* --------------------------------------------------------------- état vide */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  padding: 4rem 1rem;
+}
+
+.empty-state-hint {
+  font-size: 0.9rem;
+  max-width: 24rem;
+}
+
+.empty-state .btn {
+  margin-top: 0.75rem;
+}
+
+/* ------------------------------------------------------------------- fabs */
+
+.fabs {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 5;
+}
+
+.fab {
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+}
+
+.fab--scan {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.fab--add {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+/* Scan : mobile uniquement (cf. exigence produit) */
+.fab--scan {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  .fab--scan {
+    display: inline-flex;
+  }
+
+  .header-add {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ badge */
+
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.sync-badge--pending {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.sync-badge--offline,
+.sync-badge--error,
+.sync-badge--auth-expired {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------- dialogs */
+
+.dialog {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  width: min(92vw, 26rem);
+  box-shadow: var(--shadow);
+  margin: auto;
+}
+
+.dialog::backdrop,
+.scanner-dialog::backdrop {
+  background: oklch(0 0 0 / 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.dialog-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.dialog-message {
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.dialog-actions--split {
+  justify-content: flex-start;
+}
+
+.dialog-actions-spacer {
+  flex: 1;
+}
+
+.field {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.field input {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.field input:focus-visible {
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+
+.form-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.form-barcode {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.form-barcode code {
+  color: var(--accent);
+}
+
+.form-barcode-source {
+  display: block;
+  font-size: 0.8rem;
+}
+
+/* -------------------------------------------------------------- quantité */
+
+.dialog--quantity {
+  text-align: center;
+}
+
+.quantity-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  margin: 1rem 0;
+}
+
+.quantity-value {
+  font-size: 3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 4ch;
+}
+
+.btn-step--big {
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* --------------------------------------------------------------- scanner */
+
+.scanner-dialog {
+  border: none;
+  padding: 0;
+  background: oklch(0 0 0 / 0.9);
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.scanner-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scanner-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(80vw, 22rem);
+  aspect-ratio: 4 / 3;
+  border: 2px solid oklch(0.78 0.15 165 / 0.8);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+.scanner-top {
+  position: absolute;
+  top: calc(1rem + var(--safe-top));
+  right: 1rem;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.fab-btn {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: oklch(0 0 0 / 0.55);
+  color: var(--text);
+}
+
+.fab-btn--active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.scanner-status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(1.5rem + var(--safe-bottom));
+  display: flex;
+  justify-content: center;
+  padding: 0 1rem;
+}
+
+.scanner-status p {
+  background: oklch(0 0 0 / 0.65);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.scanner-status code {
+  color: var(--accent);
+}
+
+.scanner-error {
+  color: var(--danger);
+}
+
+/* ----------------------------------------------------------------- login */
+
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.login-card {
+  width: min(100%, 22rem);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem 1.5rem;
+}
+
+.login-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.login-subtitle {
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.9rem;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.login-card .btn--block:disabled {
+  opacity: 0.7;
+}
+
+/* ---------------------------------------------------------------- splash */
+
+.splash {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+}
+
+.splash-mark {
+  font-size: 1.5rem;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
