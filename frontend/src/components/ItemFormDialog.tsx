@@ -39,7 +39,7 @@ export const ItemFormDialog = ({
 }) => {
   const dialogRef = useDialog(open, onClose);
   const isCreate = item === null;
-  const barcode = item?.barcode ?? prefill?.barcode ?? "";
+  const barcodes = item?.barcodes ?? (prefill?.barcode !== undefined ? [prefill.barcode] : []);
 
   const [name, setName] = useState(item?.name ?? prefill?.name ?? "");
   const [location, setLocation] = useState(item?.location ?? "");
@@ -51,14 +51,23 @@ export const ItemFormDialog = ({
   };
 
   return (
-    <dialog ref={dialogRef} className="dialog dialog--form" aria-label={isCreate ? "Nouveau produit" : `Modifier ${item?.name}`}>
+    <dialog
+      ref={dialogRef}
+      className="dialog dialog--form"
+      aria-label={isCreate ? "Nouveau produit" : `Modifier ${item?.name}`}
+    >
       <form onSubmit={handleSubmit}>
         <h2 className="dialog-title">{isCreate ? "Nouveau produit" : "Modifier le produit"}</h2>
 
-        {barcode !== "" && (
+        {barcodes.length > 0 && (
           <p className="form-barcode">
-            Code-barres&nbsp;: <code>{barcode}</code>
-            {prefill?.source && <span className="form-barcode-source">{SOURCE_LABELS[prefill.source] ?? ""}</span>}
+            {barcodes.length > 1 ? "Codes-barres\u00a0: " : "Code-barres\u00a0: "}
+            {barcodes.map((code) => (
+              <code key={code}>{code}</code>
+            ))}
+            {prefill?.source && (
+              <span className="form-barcode-source">{SOURCE_LABELS[prefill.source] ?? ""}</span>
+            )}
           </p>
         )}
 

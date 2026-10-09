@@ -6,7 +6,7 @@ import type { Item } from "../entities/types";
 const makeItem = (qty: number): Item => ({
   id: "id-1",
   name: "Lessic Pur",
-  barcode: "3017620422003",
+  barcodes: ["3017620422003"],
   location: "Cave",
   category: "Ménage",
   qty,
@@ -20,7 +20,12 @@ afterEach(cleanup);
 describe("ItemRow", () => {
   it("affiche nom, méta et quantité", () => {
     render(
-      <ItemRow item={makeItem(7)} onAdjust={() => {}} onOpenQuantity={() => {}} onEdit={() => {}} />,
+      <ItemRow
+        item={makeItem(7)}
+        onAdjust={() => {}}
+        onOpenQuantity={() => {}}
+        onEdit={() => {}}
+      />,
     );
     expect(screen.getByText("Lessic Pur")).toBeInTheDocument();
     expect(screen.getByText("Cave · Ménage")).toBeInTheDocument();
@@ -30,7 +35,12 @@ describe("ItemRow", () => {
   it("+ et − émettent un ajustement de ±1", () => {
     const onAdjust = vi.fn();
     render(
-      <ItemRow item={makeItem(3)} onAdjust={onAdjust} onOpenQuantity={() => {}} onEdit={() => {}} />,
+      <ItemRow
+        item={makeItem(3)}
+        onAdjust={onAdjust}
+        onOpenQuantity={() => {}}
+        onEdit={() => {}}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Ajouter un Lessic Pur" }));
     fireEvent.click(screen.getByRole("button", { name: "Retirer un Lessic Pur" }));
@@ -40,7 +50,12 @@ describe("ItemRow", () => {
 
   it("− est désactivé à zéro", () => {
     render(
-      <ItemRow item={makeItem(0)} onAdjust={() => {}} onOpenQuantity={() => {}} onEdit={() => {}} />,
+      <ItemRow
+        item={makeItem(0)}
+        onAdjust={() => {}}
+        onOpenQuantity={() => {}}
+        onEdit={() => {}}
+      />,
     );
     expect(screen.getByRole("button", { name: "Retirer un Lessic Pur" })).toBeDisabled();
   });
@@ -66,5 +81,37 @@ describe("ItemRow", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Modifier Lessic Pur" }));
     expect(onEdit).toHaveBeenCalledExactlyOnceWith(makeItem(1));
+  });
+
+  it("mode fusion : la case à cocher et le tap sélectionnent, pas de contrôles quantité", () => {
+    const onToggleSelect = vi.fn();
+    const { rerender, container } = render(
+      <ItemRow
+        item={makeItem(3)}
+        onAdjust={() => {}}
+        onOpenQuantity={() => {}}
+        onEdit={() => {}}
+        selectable
+        onToggleSelect={onToggleSelect}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Ajouter un Lessic Pur" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Sélectionner Lessic Pur" })).not.toBeChecked();
+    fireEvent.click(screen.getByText("Lessic Pur"));
+    fireEvent.click(container.querySelector(".item-row")!);
+    expect(onToggleSelect).toHaveBeenCalledTimes(2);
+
+    rerender(
+      <ItemRow
+        item={makeItem(3)}
+        onAdjust={() => {}}
+        onOpenQuantity={() => {}}
+        onEdit={() => {}}
+        selectable
+        selected
+        onToggleSelect={onToggleSelect}
+      />,
+    );
+    expect(screen.getByRole("checkbox", { name: "Sélectionner Lessic Pur" })).toBeChecked();
   });
 });

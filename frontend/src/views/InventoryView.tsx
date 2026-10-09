@@ -10,6 +10,8 @@ import { Header } from "../components/Header";
 import { ItemFormDialog } from "../components/ItemFormDialog";
 import type { ItemDraft } from "../components/ItemFormDialog";
 import { ItemList } from "../components/ItemList";
+import { MergeDialog } from "../components/MergeDialog";
+import type { MergeDraft } from "../components/MergeDialog";
 import { QuantityDialog } from "../components/QuantityDialog";
 import { ScannerDialog } from "../components/ScannerDialog";
 import { db } from "../db/db";
@@ -67,6 +69,9 @@ export const InventoryView = () => {
   const [query, setQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [mergeMode, setMergeMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [qtyItem, setQtyItem] = useState<Item | null>(null);
   const [form, setForm] = useState<FormState>({ mode: "closed" });
   const [deleteCandidate, setDeleteCandidate] = useState<Item | null>(null);
@@ -77,15 +82,15 @@ export const InventoryView = () => {
 
   const locations = useMemo(
     () =>
-      [...new Set(items.map((item) => item.location).filter((value) => value !== ""))].sort((a, b) =>
-        normalizeText(a).localeCompare(normalizeText(b), "fr"),
+      [...new Set(items.map((item) => item.location).filter((value) => value !== ""))].sort(
+        (a, b) => normalizeText(a).localeCompare(normalizeText(b), "fr"),
       ),
     [items],
   );
   const categories = useMemo(
     () =>
-      [...new Set(items.map((item) => item.category).filter((value) => value !== ""))].sort((a, b) =>
-        normalizeText(a).localeCompare(normalizeText(b), "fr"),
+      [...new Set(items.map((item) => item.category).filter((value) => value !== ""))].sort(
+        (a, b) => normalizeText(a).localeCompare(normalizeText(b), "fr"),
       ),
     [items],
   );
@@ -104,6 +109,73 @@ export const InventoryView = () => {
   );
 
   const afterWrite = useCallback(() => requestSyncSoon(), []);
+
+  /** Produits sélectionnés en mode fusion (indépendant des filtres, ordre de la liste). */
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedIds.has(item.id)).sort(compareItems),
+    [items, selectedIds],
+  );
+
+  const toggleMergeMode = useCallback(() => {
+    if (mergeMode) setSelectedIds(new Set());
+    setMergeMode(!mergeMode);
+    setMergeOpen(false);
+  }, [mergeMode]);
+
+  const toggleSelect = useCallback((item: Item) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.add(item.id);
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Fusion : le premier produit (ordre de la liste) est conservé, les autres supprimés.
+   * Ordre des ops : suppression des absorbés (libère leurs codes-barres) → cumul des codes-barres
+   * → champs édités → quantité (ajustement delta). Toutes enregistrées localement puis sync.
+   */
+  const handleMerge = useCallback(
+    async (draft: MergeDraft) => {
+      setMergeOpen(false);
+      if (selectedItems.length < 2) return;
+      const survivor = selectedItems[0]!;
+      for (const item of selectedItems.slice(1)) {
+        await recordOp({ type: "item.delete", entityId: item.id, payload: {} });
+      }
+      const barcodes = [...new Set(selectedItems.flatMap((item) => item.barcodes))];
+      if (barcodes.join("\n") !== survivor.barcodes.join("\n")) {
+        await recordOp({
+          type: "item.barcodes.set",
+          entityId: survivor.id,
+          payload: { barcodes },
+        });
+      }
+      const changes: Array<{ field: SettableField; value: string }> = [];
+      if (draft.name !== survivor.name) changes.push({ field: "name", value: draft.name });
+      if (draft.location !== survivor.location) {
+        changes.push({ field: "location", value: draft.location });
+      }
+      if (draft.category !== survivor.category) {
+        changes.push({ field: "category", value: draft.category });
+      }
+      for (const change of changes) {
+        await recordOp({ type: "item.set", entityId: survivor.id, payload: change });
+      }
+      const delta = draft.qty - survivor.qty;
+      if (delta !== 0) {
+        await recordOp({ type: "item.adjust", entityId: survivor.id, payload: { delta } });
+      }
+      setMergeMode(false);
+      setSelectedIds(new Set());
+      afterWrite();
+    },
+    [selectedItems, afterWrite],
+  );
 
   const handleAdjust = useCallback(
     async (item: Item, delta: number) => {
@@ -126,7 +198,7 @@ export const InventoryView = () => {
       if (form.mode === "create") {
         const payload: CreatePayload = { name: draft.name };
         const barcode = form.prefill?.barcode ?? "";
-        if (barcode !== "") payload.barcode = barcode;
+        if (barcode !== "") payload.barcodes = [barcode];
         if (draft.location !== "") payload.location = draft.location;
         if (draft.category !== "") payload.category = draft.category;
         const op = await recordOp({
@@ -147,8 +219,10 @@ export const InventoryView = () => {
         const item = form.item;
         const changes: Array<{ field: SettableField; value: string }> = [];
         if (draft.name !== item.name) changes.push({ field: "name", value: draft.name });
-        if (draft.location !== item.location) changes.push({ field: "location", value: draft.location });
-        if (draft.category !== item.category) changes.push({ field: "category", value: draft.category });
+        if (draft.location !== item.location)
+          changes.push({ field: "location", value: draft.location });
+        if (draft.category !== item.category)
+          changes.push({ field: "category", value: draft.category });
         for (const change of changes) {
           await recordOp({ type: "item.set", entityId: item.id, payload: change });
         }
@@ -211,6 +285,19 @@ export const InventoryView = () => {
         onBadgeClick={handleBadgeClick}
       />
 
+      {(items.length >= 2 || mergeMode) && (
+        <nav className="chips" aria-label="Mode fusion">
+          <button
+            type="button"
+            className={`chip${mergeMode ? " chip--active" : ""}`}
+            aria-pressed={mergeMode}
+            onClick={toggleMergeMode}
+          >
+            {mergeMode ? `Fusionner · ${selectedItems.length}` : "Fusionner"}
+          </button>
+        </nav>
+      )}
+
       <FilterChips
         label="Filtrer par emplacement"
         values={locations}
@@ -234,10 +321,29 @@ export const InventoryView = () => {
           onOpenQuantity={setQtyItem}
           onEdit={openEdit}
           onAdd={openCreate}
+          mergeMode={mergeMode}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
         />
       </main>
 
-      <Fabs onScan={() => setScannerOpen(true)} onAdd={openCreate} />
+      {mergeMode ? (
+        <div className="merge-bar" role="toolbar" aria-label="Actions de fusion">
+          <button type="button" className="btn btn--ghost" onClick={toggleMergeMode}>
+            Annuler
+          </button>
+          <button
+            type="button"
+            className="btn btn--accent"
+            disabled={selectedItems.length < 2}
+            onClick={() => setMergeOpen(true)}
+          >
+            Fusionner ({selectedItems.length})
+          </button>
+        </div>
+      ) : (
+        <Fabs onScan={() => setScannerOpen(true)} onAdd={openCreate} />
+      )}
 
       <QuantityDialog
         key={qtyItem?.id ?? "none"}
@@ -276,6 +382,17 @@ export const InventoryView = () => {
         onCancel={() => setDeleteCandidate(null)}
         onConfirm={() => void handleDelete(deleteCandidate!)}
       />
+
+      {mergeOpen && selectedItems.length >= 2 && (
+        <MergeDialog
+          open
+          items={selectedItems}
+          locations={locations}
+          categories={categories}
+          onClose={() => setMergeOpen(false)}
+          onConfirm={(draft) => void handleMerge(draft)}
+        />
+      )}
 
       <ScannerDialog
         open={scannerOpen}

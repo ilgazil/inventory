@@ -1,8 +1,17 @@
 // Fold (repli déterministe) des opérations → état courant.
-// Invariants (cf. SPECS.md § 4.3) : qty ≥ 0, LWW par champ, déduplication de création par code-barres,
-// tombstones définitives. Deux appareils appliquant le même ensemble d'ops aboutissent au même état.
+// Invariants (cf. SPECS.md § 4.3) : qty ≥ 0, LWW par champ, unicité des codes-barres entre items
+// actifs, tombstones définitives. Deux appareils appliquant le même ensemble d'ops aboutissent au
+// même état.
 import { compareHlc } from "./hlc";
-import type { AdjustPayload, CreatePayload, Item, Op, SetPayload, SettableField } from "./types";
+import type {
+  AdjustPayload,
+  BarcodesPayload,
+  CreatePayload,
+  Item,
+  Op,
+  SetPayload,
+  SettableField,
+} from "./types";
 
 export type ItemMap = Map<string, Item>;
 
@@ -19,14 +28,29 @@ export const compareOps = (a: Op, b: Op): number =>
   (a.deviceId < b.deviceId ? -1 : a.deviceId > b.deviceId ? 1 : 0) ||
   (a.uuid < b.uuid ? -1 : a.uuid > b.uuid ? 1 : 0);
 
-const barcodeAlreadyTaken = (items: ItemMap, barcode: string, exceptId: string): boolean => {
-  for (const item of items.values()) {
-    if (!item.deleted && item.id !== exceptId && item.barcode !== "" && item.barcode === barcode) {
-      return true;
+/** Normalise une liste de codes-barres : trim, vides exclus, dédupliquée. */
+const normalizeBarcodes = (barcodes: readonly string[]): string[] => [
+  ...new Set(barcodes.map((code) => code.trim()).filter((code) => code !== "")),
+];
+
+const hasBarcodeConflict = (
+  items: ItemMap,
+  barcodes: readonly string[],
+  exceptId: string,
+): boolean => {
+  if (barcodes.length === 0) return false;
+  for (const other of items.values()) {
+    if (other.deleted || other.id === exceptId) continue;
+    for (const code of barcodes) {
+      if (other.barcodes.includes(code)) return true;
     }
   }
   return false;
 };
+
+/** Codes-barres d'une op de création : forme courante `barcodes`, repli legacy `barcode`. */
+const createBarcodes = (payload: CreatePayload): string[] =>
+  normalizeBarcodes(payload.barcodes ?? (payload.barcode !== undefined ? [payload.barcode] : []));
 
 /** Applique une op à la carte d'items (mutation en place, pour l'usage incrémental local). */
 export const applyOp = (items: ItemMap, op: Op): void => {
@@ -37,19 +61,19 @@ export const applyOp = (items: ItemMap, op: Op): void => {
       const payload = op.payload as CreatePayload;
       const name = payload.name.trim();
       if (name === "") return;
-      const barcode = (payload.barcode ?? "").trim();
-      if (barcode !== "" && barcodeAlreadyTaken(items, barcode, op.entityId)) return;
+      const barcodes = createBarcodes(payload);
+      if (hasBarcodeConflict(items, barcodes, op.entityId)) return;
       const location = (payload.location ?? "").trim();
       const category = (payload.category ?? "").trim();
       const fieldHlc = emptyFieldHlc();
       fieldHlc.name = op.hlc;
-      if (barcode !== "") fieldHlc.barcode = op.hlc;
+      if (barcodes.length > 0) fieldHlc.barcode = op.hlc;
       if (location !== "") fieldHlc.location = op.hlc;
       if (category !== "") fieldHlc.category = op.hlc;
       items.set(op.entityId, {
         id: op.entityId,
         name,
-        barcode,
+        barcodes,
         location,
         category,
         qty: 0,
@@ -68,8 +92,23 @@ export const applyOp = (items: ItemMap, op: Op): void => {
       if (!item || item.deleted) return;
       const { field, value } = op.payload as SetPayload;
       if (compareHlc(op.hlc, item.fieldHlc[field]) <= 0) return; // LWW par champ
-      item[field] = value.trim();
+      const trimmed = value.trim();
+      if (field === "barcode") {
+        // Forme legacy (un seul code) : traduite dans la liste.
+        item.barcodes = trimmed === "" ? [] : [trimmed];
+      } else {
+        item[field] = trimmed;
+      }
       item.fieldHlc[field] = op.hlc;
+      return;
+    }
+    case "item.barcodes.set": {
+      if (!item || item.deleted) return;
+      if (compareHlc(op.hlc, item.fieldHlc.barcode) <= 0) return; // LWW champ codes-barres
+      const barcodes = normalizeBarcodes((op.payload as BarcodesPayload).barcodes);
+      if (hasBarcodeConflict(items, barcodes, op.entityId)) return;
+      item.barcodes = barcodes;
+      item.fieldHlc.barcode = op.hlc;
       return;
     }
     case "item.delete": {

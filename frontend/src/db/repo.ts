@@ -73,22 +73,24 @@ export const rebuildProjection = async (): Promise<void> => {
   });
 };
 
-export const pendingCount = async (): Promise<number> =>
-  db.ops.where("synced").equals(0).count();
+export const pendingCount = async (): Promise<number> => db.ops.where("synced").equals(0).count();
 
 export const pendingOps = async (limit: number): Promise<StoredOp[]> =>
   db.ops.where("synced").equals(0).limit(limit).toArray();
 
 export const markSynced = async (uuids: readonly string[]): Promise<void> => {
   if (uuids.length === 0) return;
-  await db.ops.where("uuid").anyOf([...uuids]).modify({ synced: 1 });
+  await db.ops
+    .where("uuid")
+    .anyOf([...uuids])
+    .modify({ synced: 1 });
 };
 
 export const getCursor = async (): Promise<number> => (await getMeta<number>("cursor")) ?? 0;
 export const setCursor = (cursor: number): Promise<unknown> => setMeta("cursor", cursor);
 
 export const findItemByBarcode = async (barcode: string): Promise<Item | undefined> => {
-  const item = await db.items.where("barcode").equals(barcode).first();
+  const item = await db.items.where("barcodes").equals(barcode).first();
   return item && !item.deleted ? item : undefined;
 };
 

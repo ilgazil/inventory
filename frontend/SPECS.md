@@ -40,12 +40,13 @@ synchronisation et au lookup de codes-barres inconnus.
 
 ## 3. Données locales (Dexie / IndexedDB)
 
-Base `inventory` (v1) :
+Base `inventory` (v2 — v1 : un seul `barcode` scalaire par item, migré vers la liste `barcodes`
+lors de l'upgrade) :
 
 | Table | Champs / index | Rôle |
 |-------|----------------|------|
 | `ops` | `uuid` (PK), `deviceId`, `hlc`, `type`, `entityId`, `payload`, `synced` (0/1), `seq` (null si non synchronisée) | journal local **complet** de toutes les opérations (locales + distantes) |
-| `items` | `id` (PK), `name`, `barcode`, `location`, `category`, `qty`, `deleted`, `createdAt`, `updatedAt`, `fieldHlc` ({name, barcode, location, category}) | **projection** de l'état courant, reconstruite par le fold (§ 4) ; les tombstones y restent (`deleted: 1`, filtrés par l'UI) |
+| `items` | `id` (PK), `name`, `barcodes` (index multi-entrées), `location`, `category`, `qty`, `deleted`, `createdAt`, `updatedAt`, `fieldHlc` ({name, barcode, location, category}) | **projection** de l'état courant, reconstruite par le fold (§ 4) ; les tombstones y restent (`deleted: 1`, filtrés par l'UI) |
 | `meta` | `key` (PK), `value` | `deviceId`, `cursor` (seq serveur), `hlcWall`, `hlcCounter`, `lastSyncAt` |
 | `lookups` | `barcode` (PK), `found`, `source`, `name`, `brand`, `quantity`, `imageUrl`, `fetchedAt` | cache local du lookup (§ 7.3) |
 
@@ -58,9 +59,10 @@ Base `inventory` (v1) :
 
 ### 4.1 Opérations
 
-Mêmes formes que le contrat backend (`item.create`, `item.adjust`, `item.set`, `item.delete`). Chaque
-mutation de l'UI produit une ou plusieurs ops **immédiatement écrites dans `ops`** (jamais d'appel réseau
-dans le chemin d'écriture). Une op locale est `synced: 0`, `seq: null` jusqu'à son ack.
+Mêmes formes que le contrat backend (`item.create`, `item.adjust`, `item.set`, `item.barcodes.set`,
+`item.delete`). Chaque mutation de l'UI produit une ou plusieurs ops **immédiatement écrites dans
+`ops`** (jamais d'appel réseau dans le chemin d'écriture). Une op locale est `synced: 0`, `seq: null`
+jusqu'à son ack.
 
 ### 4.2 Horloge hybride (HLC)
 
@@ -77,10 +79,11 @@ dans le chemin d'écriture). Une op locale est `synced: 0`, `seq: null` jusqu'à
 
 | Op | Règle |
 |----|-------|
-| `item.create` | ignore si l'id existe déjà, ou si `barcode` non vide est déjà porté par un autre item (déduplication de création concurrente : premier arrivé gagne) ; sinon crée `{qty: 0, …payload}` |
+| `item.create` | ignore si l'id existe déjà, ou si un code-barres du payload est déjà porté par un autre item actif (déduplication de création concurrente : premier arrivé gagne) ; sinon crée `{qty: 0, barcodes, …payload}` (`barcode` scalaire = forme legacy, traduite en liste) |
 | `item.adjust` | si l'item existe et non supprimé : `qty = max(0, qty + delta)` |
-| `item.set` | si l'item existe, non supprimé, et `op.hlc > fieldHlc[field]` : applique (LWW par champ) et enregistre `fieldHlc[field]` |
-| `item.delete` | marque `deleted = 1` (les ops suivantes sur cet id sont ignorées) |
+| `item.set` | si l'item existe, non supprimé, et `op.hlc > fieldHlc[field]` : applique (LWW par champ) et enregistre `fieldHlc[field]` ; `field: "barcode"` (legacy) est traduit dans la liste `barcodes` |
+| `item.barcodes.set` | si l'item existe, non supprimé, et `op.hlc > fieldHlc.barcode` : remplace la liste (trim + dédup), ignore si un code est déjà porté par un autre item actif |
+| `item.delete` | marque `deleted = 1` (les ops suivantes sur cet id sont ignorées) ; la suppression libère les codes-barres de l'item |
 
 **Invariants** : `qty ≥ 0` toujours ; les tombstones survivent ; deux appareils appliquant le même
 ensemble d'ops aboutissent au **même état octet pour octet**.
@@ -173,7 +176,25 @@ Responsive **CSS pur** (media queries) : aucun JS ne lit la taille d'écran.
 - état vide filtré : « Aucun résultat pour _X_. »
 - les items supprimés n'apparaissent jamais.
 
-### 6.3 Modale quantité (`<dialog>`)
+### 6.3 Mode fusion
+
+Pour regrouper des produits pseudo-dupliqués (variantes de parfum, ressaisies) :
+
+- **Activation** : chip « Fusionner » (visible dès 2 produits) — toggle comme les filtres ;
+- en mode fusion, les lignes affichent une **case à cocher** à la place des contrôles quantité/édition ;
+  le tap sur la ligne sélectionne aussi ; les FABs (scan/ajout) sont remplacés par une **barre
+  d'action** fixe en bas (« Annuler » + « Fusionner (N) », actif dès N ≥ 2) ;
+- la sélection **persiste à travers les filtres et la recherche** (on peut fusionner des produits de
+  deux emplacements) ; un item supprimé entre-temps est retiré de la sélection ;
+- **modale de fusion** (`<dialog>`) : nom du produit conservé (par défaut : celui du **premier de la
+  liste**, ordre alphabétique), emplacement, catégorie, **quantité** (par défaut : **somme** des
+  produits fusionnés) — tout éditable (validation native) ; codes-barres **cumulés** affichés en
+  lecture seule ;
+- **écritures** (ordre) : `item.delete` des produits absorbés (libère leurs codes-barres) →
+  `item.barcodes.set` (union des codes, ssi différente) → `item.set` par champ édité → `item.adjust`
+  du delta de quantité (ssi ≠ 0).
+
+### 6.4 Modale quantité (`<dialog>`)
 
 - Contenu : nom de l'item, gros bouton −, quantité (grand chiffre), gros bouton + ;
 - **maintien appuyé = répétition** (`pointerdown`/`pointerup`, ~120 ms) ;
@@ -183,17 +204,17 @@ Responsive **CSS pur** (media queries) : aucun JS ne lit la taille d'écran.
   (= annuler) ;
 - validée avec delta ≠ 0 uniquement (delta 0 = simple fermeture).
 
-### 6.4 Création / édition d'item (`<dialog>`)
+### 6.5 Création / édition d'item (`<dialog>`)
 
 - Champs : **nom** (requis, validation native, autofocus, max 256) ; **emplacement** et **catégorie**
   (`<input list>` + `<datalist>` alimentés par les valeurs existantes — suggestion native, saisie libre,
-  max 64) ; **code-barres** affiché (lecture seule ; renseigné par le scan) ;
+  max 64) ; **code-barres** affiché (lecture seule ; renseigné par le scan, liste complète en édition) ;
 - création : une op `item.create` (+ éventuelles `item.set` si emplacement/catégorie) ;
 - édition : une op `item.set` **par champ modifié** (LWW par champ) ;
 - suppression : bouton → modale de confirmation native → `item.delete` ;
 - « Enregistrer » ferme la modale ; en création après un scan, la modale quantité s'ouvre ensuite (§ 7.2).
 
-### 6.5 FABs
+### 6.6 FABs
 
 - **Scan** (icône code-barres) : `display: none` ≥ 768 px ;
 - **Ajout** (icône +) : visible uniquement sur mobile (desktop = bouton du header) ;

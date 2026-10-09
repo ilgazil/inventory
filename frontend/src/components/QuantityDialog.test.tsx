@@ -6,7 +6,7 @@ import type { Item } from "../entities/types";
 const makeItem = (qty: number): Item => ({
   id: "id-1",
   name: "Lessic Pur",
-  barcode: "",
+  barcodes: [],
   location: "Cave",
   category: "Ménage",
   qty,

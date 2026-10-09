@@ -14,7 +14,7 @@ export const matchesQuery = (item: Item, rawQuery: string): boolean => {
     .filter((term) => term !== "");
   if (terms.length === 0) return true;
   const haystack = normalizeText(
-    [item.name, item.location, item.category, item.barcode].filter(Boolean).join(" "),
+    [item.name, item.location, item.category, ...item.barcodes].filter(Boolean).join(" "),
   );
   return terms.every((term) => haystack.includes(term));
 };

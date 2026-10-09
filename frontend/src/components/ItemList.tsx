@@ -1,4 +1,4 @@
-// Liste filtrée + chips d'emplacement + état vide.
+// Liste filtrée + état vide. En mode fusion : cases à cocher au lieu des contrôles de quantité.
 import type { Item } from "../entities/types";
 import { ItemRow } from "./ItemRow";
 import { BoxIcon } from "./icons";
@@ -11,6 +11,9 @@ export const ItemList = ({
   onOpenQuantity,
   onEdit,
   onAdd,
+  mergeMode = false,
+  selectedIds,
+  onToggleSelect,
 }: {
   items: Item[];
   filtered: boolean;
@@ -19,6 +22,9 @@ export const ItemList = ({
   onOpenQuantity: (item: Item) => void;
   onEdit: (item: Item) => void;
   onAdd: () => void;
+  mergeMode?: boolean;
+  selectedIds?: ReadonlySet<string>;
+  onToggleSelect?: (item: Item) => void;
 }) => {
   if (items.length === 0) {
     return (
@@ -55,6 +61,9 @@ export const ItemList = ({
           onAdjust={onAdjust}
           onOpenQuantity={onOpenQuantity}
           onEdit={onEdit}
+          selectable={mergeMode}
+          selected={selectedIds?.has(item.id) ?? false}
+          onToggleSelect={onToggleSelect}
         />
       ))}
     </ul>

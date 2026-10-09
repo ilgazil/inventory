@@ -73,12 +73,40 @@ describe("fold — create", () => {
     expect(items.get(ITEM_ID)?.name).toBe("Premier");
   });
 
-  it("déduplique deux créations avec le même code-barres", () => {
+  it("déduplique deux créations avec le même code-barres (forme legacy)", () => {
     const items = rebuild([
       op(1, "item.create", { name: "Original", barcode: "3017620422003" }),
-      op(2, "item.create", { name: "Doublon", barcode: "3017620422003" }, { entityId: OTHER_ITEM_ID }),
+      op(
+        2,
+        "item.create",
+        { name: "Doublon", barcode: "3017620422003" },
+        { entityId: OTHER_ITEM_ID },
+      ),
     ]);
     expect(items.get(ITEM_ID)?.name).toBe("Original");
+    expect(items.has(OTHER_ITEM_ID)).toBe(false);
+  });
+
+  it("crée un item avec plusieurs codes-barres (dédupliqués, trimmés)", () => {
+    const items = rebuild([
+      op(1, "item.create", {
+        name: "Lessic Pur",
+        barcodes: [" 3017620422003", "3017620422003", "AUX-01"],
+      }),
+    ]);
+    expect(items.get(ITEM_ID)?.barcodes).toEqual(["3017620422003", "AUX-01"]);
+  });
+
+  it("ignore une création dont un code-barres est déjà pris par un item actif", () => {
+    const items = rebuild([
+      op(1, "item.create", { name: "Original", barcodes: ["3017620422003"] }),
+      op(
+        2,
+        "item.create",
+        { name: "Doublon", barcodes: ["AUX-01", "3017620422003"] },
+        { entityId: OTHER_ITEM_ID },
+      ),
+    ]);
     expect(items.has(OTHER_ITEM_ID)).toBe(false);
   });
 });
@@ -152,6 +180,87 @@ describe("fold — set (LWW par champ)", () => {
       op(3, "item.set", { field: "name", value: "Zombie" }),
     ]);
     expect(items.get(ITEM_ID)?.name).toBe("X");
+  });
+});
+
+describe("fold — codes-barres", () => {
+  it("un set legacy du champ barcode est traduit dans la liste", () => {
+    const items = rebuild([
+      op(1, "item.create", { name: "X" }),
+      op(2, "item.set", { field: "barcode", value: "3017620422003" }),
+    ]);
+    expect(items.get(ITEM_ID)?.barcodes).toEqual(["3017620422003"]);
+    expect(items.get(ITEM_ID)?.fieldHlc.barcode).toBe(hlcOf(2));
+
+    const cleared = rebuild([
+      op(1, "item.create", { name: "X", barcodes: ["3017620422003"] }),
+      op(2, "item.set", { field: "barcode", value: "" }),
+    ]);
+    expect(cleared.get(ITEM_ID)?.barcodes).toEqual([]);
+  });
+
+  it("item.barcodes.set remplace la liste (dédupliquée) et applique le LWW", () => {
+    const ops = [
+      op(1, "item.create", { name: "X", barcodes: ["AUX-01"] }),
+      op(2, "item.barcodes.set", { barcodes: ["AUX-01", "AUX-02"] }),
+      op(3, "item.barcodes.set", { barcodes: ["AUX-02"] }),
+    ];
+    expect(serialize(rebuild(ops))).toBe(serialize(rebuild([...ops].reverse())));
+    expect(rebuild(ops).get(ITEM_ID)?.barcodes).toEqual(["AUX-02"]);
+  });
+
+  it("ignore un barcodes.set qui reprend un code d'un autre item actif", () => {
+    const items = rebuild([
+      op(1, "item.create", { name: "Original", barcodes: ["3017620422003"] }),
+      op(2, "item.create", { name: "Autre" }, { entityId: OTHER_ITEM_ID }),
+      op(3, "item.barcodes.set", { barcodes: ["3017620422003"] }, { entityId: OTHER_ITEM_ID }),
+    ]);
+    expect(items.get(OTHER_ITEM_ID)?.barcodes).toEqual([]);
+    expect(items.get(ITEM_ID)?.barcodes).toEqual(["3017620422003"]);
+  });
+
+  it("un item supprimé libère ses codes-barres (base de la fusion)", () => {
+    const items = rebuild([
+      op(
+        1,
+        "item.create",
+        { name: "Doublon", barcodes: ["3017620422003"] },
+        { entityId: OTHER_ITEM_ID },
+      ),
+      op(2, "item.create", { name: "Original", barcodes: ["AUX-01"] }),
+      op(3, "item.delete", {}, { entityId: OTHER_ITEM_ID }),
+      op(4, "item.barcodes.set", { barcodes: ["3017620422003", "AUX-01"] }),
+    ]);
+    expect(items.get(OTHER_ITEM_ID)?.deleted).toBe(true);
+    expect(items.get(ITEM_ID)?.barcodes).toEqual(["3017620422003", "AUX-01"]);
+  });
+
+  it("scénario de fusion complet : deletes, cumul des codes, champs, quantité — convergent", () => {
+    const scenario = (): Op[] => [
+      op(1, "item.create", { name: "Liquide vaisselle citron", barcodes: ["1111111111111"] }),
+      op(2, "item.adjust", { delta: 3 }),
+      op(
+        3,
+        "item.create",
+        { name: "Liquide vaisselle vanille", barcodes: ["2222222222222"] },
+        { entityId: OTHER_ITEM_ID, deviceId: DEVICE_B },
+      ),
+      op(4, "item.adjust", { delta: 4 }, { entityId: OTHER_ITEM_ID, deviceId: DEVICE_B }),
+      op(5, "item.delete", {}, { entityId: OTHER_ITEM_ID, deviceId: DEVICE_B }),
+      op(6, "item.barcodes.set", { barcodes: ["1111111111111", "2222222222222"] }),
+      op(7, "item.set", { field: "name", value: "Liquide vaisselle" }),
+      op(8, "item.adjust", { delta: 4 }),
+    ];
+    const reference = serialize(rebuild(scenario()));
+    for (let seed = 1; seed <= 25; seed += 1) {
+      expect(serialize(rebuild(seededShuffle(scenario(), seed)))).toBe(reference);
+    }
+    expect(rebuild(scenario()).get(ITEM_ID)).toMatchObject({
+      name: "Liquide vaisselle",
+      qty: 7,
+      barcodes: ["1111111111111", "2222222222222"],
+    });
+    expect(rebuild(scenario()).get(OTHER_ITEM_ID)?.deleted).toBe(true);
   });
 });
 

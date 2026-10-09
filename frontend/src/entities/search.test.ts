@@ -5,7 +5,7 @@ import type { Item } from "./types";
 const makeItem = (overrides: Partial<Item> = {}): Item => ({
   id: "id-1",
   name: "Lessic Pur",
-  barcode: "3017620422003",
+  barcodes: ["3017620422003"],
   location: "Cave",
   category: "Ménage",
   qty: 2,

@@ -19,6 +19,15 @@ export interface LookupRow {
   fetchedAt: number;
 }
 
+/**
+ * Migration v1 → v2 (mutale, testée unitairement) : l'ancien champ scalaire `barcode` devient la
+ * liste `barcodes` (multi-association de codes-barres pour la fusion).
+ */
+export const migrateItemV1ToV2 = (item: { barcode?: string; barcodes?: string[] }): void => {
+  item.barcodes = item.barcode ? [item.barcode] : [];
+  delete item.barcode;
+};
+
 export class InventoryDb extends Dexie {
   ops!: Table<StoredOp, string>;
   items!: Table<Item, string>;
@@ -34,6 +43,17 @@ export class InventoryDb extends Dexie {
       meta: "key",
       lookups: "barcode",
     });
+    // v2 : un item peut porter plusieurs codes-barres (`*barcodes` : index multi-entrées).
+    this.version(2)
+      .stores({
+        ops: "uuid, synced, hlc",
+        items: "id, *barcodes, location, category",
+        meta: "key",
+        lookups: "barcode",
+      })
+      .upgrade(async (tx) => {
+        await tx.table("items").toCollection().modify(migrateItemV1ToV2);
+      });
   }
 }
 

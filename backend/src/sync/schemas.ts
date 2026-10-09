@@ -18,6 +18,8 @@ const hlcSchema = z
 
 const barcodeRegex = /^[0-9A-Za-z_-]{3,64}$/;
 
+const barcodesSchema = z.array(z.string().regex(barcodeRegex)).max(20);
+
 const shortText = z
   .string()
   .trim()
@@ -32,6 +34,9 @@ const nameText = z
 const createPayloadSchema = z
   .object({
     name: nameText,
+    // Codes-barres associés (forme courante) ; `barcode` = forme legacy (v1), conservée pour le
+    // replay des journaux existants.
+    barcodes: barcodesSchema.optional(),
     barcode: z.union([z.string().regex(barcodeRegex), z.literal("")]).optional(),
     location: shortText.optional(),
     category: shortText.optional(),
@@ -66,6 +71,12 @@ const setPayloadSchema = z
 
 const deletePayloadSchema = z.object({}).strict();
 
+const barcodesPayloadSchema = z
+  .object({
+    barcodes: barcodesSchema,
+  })
+  .strict();
+
 const opFields = {
   uuid: uuidSchema,
   deviceId: deviceIdSchema,
@@ -77,6 +88,9 @@ export const opSchema = z.discriminatedUnion("type", [
   z.object({ ...opFields, type: z.literal("item.create"), payload: createPayloadSchema }).strict(),
   z.object({ ...opFields, type: z.literal("item.adjust"), payload: adjustPayloadSchema }).strict(),
   z.object({ ...opFields, type: z.literal("item.set"), payload: setPayloadSchema }).strict(),
+  z
+    .object({ ...opFields, type: z.literal("item.barcodes.set"), payload: barcodesPayloadSchema })
+    .strict(),
   z.object({ ...opFields, type: z.literal("item.delete"), payload: deletePayloadSchema }).strict(),
 ]);
 

@@ -22,6 +22,33 @@ test("item.create valide (complet)", () => {
   assert.equal(result.success, true);
 });
 
+test("item.create valide (plusieurs codes-barres)", () => {
+  const result = opSchema.safeParse({
+    ...baseOp,
+    type: "item.create",
+    payload: { name: "Lessic Pur", barcodes: ["3017620422003", "AUX-01"] },
+  });
+  assert.equal(result.success, true);
+});
+
+test("item.create : codes-barres invalide rejeté", () => {
+  const result = opSchema.safeParse({
+    ...baseOp,
+    type: "item.create",
+    payload: { name: "X", barcodes: ["a!b"] },
+  });
+  assert.equal(result.success, false);
+});
+
+test("item.create : trop de codes-barres rejeté", () => {
+  const result = opSchema.safeParse({
+    ...baseOp,
+    type: "item.create",
+    payload: { name: "X", barcodes: Array.from({ length: 21 }, (_, i) => `CODE-${i}`) },
+  });
+  assert.equal(result.success, false);
+});
+
 test("item.create valide (minimal)", () => {
   const result = opSchema.safeParse({
     ...baseOp,
@@ -130,6 +157,42 @@ test("item.delete : payload vide requis", () => {
     opSchema.safeParse({ ...baseOp, type: "item.delete", payload: { delta: 1 } }).success,
     false,
   );
+});
+
+test("item.barcodes.set : liste valide acceptée", () => {
+  const result = opSchema.safeParse({
+    ...baseOp,
+    type: "item.barcodes.set",
+    payload: { barcodes: ["3017620422003", "AUX-01"] },
+  });
+  assert.equal(result.success, true);
+});
+
+test("item.barcodes.set : liste vide acceptée (retrait de tous les codes)", () => {
+  const result = opSchema.safeParse({
+    ...baseOp,
+    type: "item.barcodes.set",
+    payload: { barcodes: [] },
+  });
+  assert.equal(result.success, true);
+});
+
+test("item.barcodes.set : code invalide rejeté", () => {
+  const result = opSchema.safeParse({
+    ...baseOp,
+    type: "item.barcodes.set",
+    payload: { barcodes: ["a!b"] },
+  });
+  assert.equal(result.success, false);
+});
+
+test("item.barcodes.set : champ supplémentaire rejeté (strict)", () => {
+  const result = opSchema.safeParse({
+    ...baseOp,
+    type: "item.barcodes.set",
+    payload: { barcodes: [], extra: 1 },
+  });
+  assert.equal(result.success, false);
 });
 
 test("type inconnu rejeté", () => {

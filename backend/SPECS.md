@@ -166,9 +166,10 @@ Une opération = une mutation élémentaire, créée par un client, immuable :
 
 | `type` | `payload` | Sémantique |
 |--------|-----------|------------|
-| `item.create` | `{ name: string, barcode?: string, location?: string, category?: string }` | création d'un item (qté initiale 0) |
+| `item.create` | `{ name: string, barcodes?: string[], barcode?: string, location?: string, category?: string }` | création d'un item (qté initiale 0) ; `barcodes` = liste de codes associés, `barcode` = forme legacy (v1) conservée pour le replay |
 | `item.adjust` | `{ delta: number }` (entier) | incrément/décrément de quantité |
-| `item.set` | `{ field: "name"\|"barcode"\|"location"\|"category", value: string }` | modification d'un champ (LWW par champ) |
+| `item.set` | `{ field: "name"\|"barcode"\|"location"\|"category", value: string }` | modification d'un champ (LWW par champ) ; `field: "barcode"` = forme legacy (un seul code) |
+| `item.barcodes.set` | `{ barcodes: string[] }` (≤ 20, format `^[0-9A-Za-z_-]{3,64}$`) | remplacement de la liste des codes-barres d'un item (fusion, multi-association) |
 | `item.delete` | `{}` | suppression (tombstone) |
 
 ### 6.2 Règles serveur (volontairement minimales)
