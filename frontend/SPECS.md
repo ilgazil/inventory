@@ -170,6 +170,8 @@ Responsive **CSS pur** (media queries) : aucun JS ne lit la taille d'écran.
   accès à l'édition via un bouton discret (crayon) en fin de ligne ;
 - **recherche** (`<input type="search">`) : filtre en direct sur nom, emplacement, catégorie et
   code-barres — insensible à la casse/accents, **tous les mots** du terme doivent matcher ;
+- **filtre manquants** : chip « Manquants » (visible si au moins un produit est à 0, à gauche de
+  « Fusionner ») — n'affiche que les produits en rupture ; se combine avec les autres filtres ;
 - **filtre emplacement** et **filtre catégorie** : chips horizontales défilables (« Tous » + valeurs
   existantes, déduites des données) ; les deux filtres se combinent (ET) avec la recherche ;
 - **état vide** : « Aucun produit. Ajoute ton premier produit ou scanne un code-barres. »

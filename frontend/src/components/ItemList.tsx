@@ -32,7 +32,9 @@ export const ItemList = ({
         <BoxIcon size={40} />
         {filtered ? (
           <>
-            <p>Aucun résultat pour « {query.trim()} ».</p>
+            <p>
+              {query.trim() !== "" ? `Aucun résultat pour « ${query.trim()} ».` : "Aucun résultat."}
+            </p>
             <button type="button" className="btn btn--ghost" onClick={onAdd}>
               Créer un produit
             </button>

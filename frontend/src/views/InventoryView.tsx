@@ -69,6 +69,7 @@ export const InventoryView = () => {
   const [query, setQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [missingOnly, setMissingOnly] = useState(false);
   const [mergeMode, setMergeMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -95,6 +96,8 @@ export const InventoryView = () => {
     [items],
   );
 
+  const missingCount = useMemo(() => items.filter((item) => item.qty === 0).length, [items]);
+
   const filteredItems = useMemo(
     () =>
       items
@@ -102,10 +105,11 @@ export const InventoryView = () => {
           (item) =>
             matchesQuery(item, query) &&
             (locationFilter === null || item.location === locationFilter) &&
-            (categoryFilter === null || item.category === categoryFilter),
+            (categoryFilter === null || item.category === categoryFilter) &&
+            (!missingOnly || item.qty === 0),
         )
         .sort(compareItems),
-    [items, query, locationFilter, categoryFilter],
+    [items, query, locationFilter, categoryFilter, missingOnly],
   );
 
   const afterWrite = useCallback(() => requestSyncSoon(), []);
@@ -285,8 +289,18 @@ export const InventoryView = () => {
         onBadgeClick={handleBadgeClick}
       />
 
-      {(items.length >= 2 || mergeMode) && (
-        <nav className="chips" aria-label="Mode fusion">
+      {(missingCount > 0 || items.length >= 2 || mergeMode) && (
+        <nav className="chips" aria-label="Filtres et actions">
+          {missingCount > 0 && (
+            <button
+              type="button"
+              className={`chip${missingOnly ? " chip--active" : ""}`}
+              aria-pressed={missingOnly}
+              onClick={() => setMissingOnly(!missingOnly)}
+            >
+              Manquants
+            </button>
+          )}
           <button
             type="button"
             className={`chip${mergeMode ? " chip--active" : ""}`}
@@ -315,7 +329,9 @@ export const InventoryView = () => {
       <main className="app-main">
         <ItemList
           items={filteredItems}
-          filtered={query.trim() !== "" || locationFilter !== null || categoryFilter !== null}
+          filtered={
+            query.trim() !== "" || locationFilter !== null || categoryFilter !== null || missingOnly
+          }
           query={query}
           onAdjust={(item, delta) => void handleAdjust(item, delta)}
           onOpenQuantity={setQtyItem}
