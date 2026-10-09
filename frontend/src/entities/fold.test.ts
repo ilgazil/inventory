@@ -23,14 +23,15 @@ const op = (
   options: { deviceId?: string; entityId?: string } = {},
 ): Op => {
   const deviceId = options.deviceId ?? DEVICE_A;
+  // Le couple (type, payload) est construit ensemble : la forme discriminée est préservée.
   return {
     uuid: uuidOf(index),
     deviceId,
     hlc: hlcOf(index, deviceId),
     type,
     entityId: options.entityId ?? ITEM_ID,
-    payload: payload as Op["payload"],
-  };
+    payload,
+  } as Op;
 };
 
 // Générateur pseudo-aléatoire déterministe (LCG) — pas de flakiness.

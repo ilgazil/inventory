@@ -15,7 +15,11 @@ export const App = () => {
   useEffect(() => {
     initRef.current = initRepo()
       .then(() => startEngine())
-      .then(() => undefined);
+      .then(() => {
+        // Session déjà présente au chargement : l'init terminée, on entre dans l'inventaire
+        // (le splashscreen ne doit jamais rester bloqué ; token expiré → badge "Session expirée").
+        if (getToken() !== null) setPhase("ready");
+      });
   }, []);
 
   if (phase === "loading") {
