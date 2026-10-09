@@ -249,8 +249,10 @@ Corps : `{"ops": [Op…]}` — **1 à 500 opérations**.
 
 Chaîne de recherche : cache DB (TTL 7 j) → **Open Food Facts** (`world.openfoodfacts.org/api/v2/product/:code.json`)
 → **Open Products Facts** (`world.openproductsfacts.org/api/v2/product/:code.json`) → négatif.
-Timeout de 6 s par source ; `User-Agent` dédié (`inventory/<version> (usage personnel)` — étiquette des API OFF).
-Nom normalisé : `product_name` (ou `product_name_fr`, ou `generic_name`) + marque séparée.
+Timeout de 6 s par source ; `User-Agent` dédié (`inventory/<version> (usage personnel)` — étiquette des API OFF)
+et `Accept-Language: fr, en;q=0.5` (français d'abord, repli anglais — sans quoi les API renvoient l'allemand
+depuis la Suisse). Nom normalisé : `product_name` (ou `product_name_fr`, ou `product_name_en`, ou `generic_name`)
++ marque séparée.
 
 ## 8. Service du frontend (monolithe)
 

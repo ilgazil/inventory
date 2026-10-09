@@ -6,7 +6,7 @@ import {
   normalizeProductPayload,
 } from "../src/lookup/providers.ts";
 
-test("normalizeProductPayload : priorité product_name, puis fr, puis generic", () => {
+test("normalizeProductPayload : priorité product_name, puis fr, puis en, puis generic", () => {
   const result = normalizeProductPayload({
     product: { product_name: "Lessic Pur", brands: "Dr. Beckmann", quantity: "750 ml" },
   });
@@ -22,6 +22,12 @@ test("normalizeProductPayload : priorité product_name, puis fr, puis generic", 
   });
   assert.ok(fallback);
   assert.equal(fallback.name, "Produit FR");
+
+  const fallbackEn = normalizeProductPayload({
+    product: { product_name_en: "Product EN", generic_name: "Générique" },
+  });
+  assert.ok(fallbackEn);
+  assert.equal(fallbackEn.name, "Product EN");
 
   const generic = normalizeProductPayload({ product: { generic_name: "Générique" } });
   assert.ok(generic);

@@ -47,6 +47,7 @@ export const normalizeProductPayload = (data: unknown): NormalizedProduct | unde
   const name =
     pickString(p["product_name"], 512) ??
     pickString(p["product_name_fr"], 512) ??
+    pickString(p["product_name_en"], 512) ??
     pickString(p["generic_name"], 512);
   if (name === undefined) return undefined;
   return {
@@ -72,7 +73,13 @@ export const lookupBarcode = async (
   for (const { source, host } of SOURCES) {
     try {
       const response = await fetchImpl(`${host}/api/v2/product/${encodeURIComponent(barcode)}.json`, {
-        headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+        headers: {
+          "User-Agent": USER_AGENT,
+          Accept: "application/json",
+          // Max de français, repli anglais — sinon, depuis la Suisse, les API OFF/OPF
+          // renvoient souvent les noms en allemand.
+          "Accept-Language": "fr, en;q=0.5",
+        },
         signal: AbortSignal.timeout(timeoutMs),
       });
       responded = true;
