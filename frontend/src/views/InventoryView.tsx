@@ -25,11 +25,48 @@ type FormState =
   | { mode: "create"; prefill: { name?: string; barcode?: string; source?: string } | null }
   | { mode: "edit"; item: Item };
 
+/** Rangée de chips de filtrage (« Tous » + une valeur par entrée existante). */
+const FilterChips = ({
+  label,
+  values,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  values: string[];
+  selected: string | null;
+  onSelect: (value: string | null) => void;
+}) => {
+  if (values.length === 0) return null;
+  return (
+    <nav className="chips" aria-label={label}>
+      <button
+        type="button"
+        className={`chip${selected === null ? " chip--active" : ""}`}
+        onClick={() => onSelect(null)}
+      >
+        Tous
+      </button>
+      {values.map((value) => (
+        <button
+          key={value}
+          type="button"
+          className={`chip${selected === value ? " chip--active" : ""}`}
+          onClick={() => onSelect(selected === value ? null : value)}
+        >
+          {value}
+        </button>
+      ))}
+    </nav>
+  );
+};
+
 export const InventoryView = () => {
   const items = useLiveQuery(() => db.items.toArray(), [], []).filter((item) => !item.deleted);
 
   const [query, setQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [qtyItem, setQtyItem] = useState<Item | null>(null);
   const [form, setForm] = useState<FormState>({ mode: "closed" });
   const [deleteCandidate, setDeleteCandidate] = useState<Item | null>(null);
@@ -58,10 +95,12 @@ export const InventoryView = () => {
       items
         .filter(
           (item) =>
-            matchesQuery(item, query) && (locationFilter === null || item.location === locationFilter),
+            matchesQuery(item, query) &&
+            (locationFilter === null || item.location === locationFilter) &&
+            (categoryFilter === null || item.category === categoryFilter),
         )
         .sort(compareItems),
-    [items, query, locationFilter],
+    [items, query, locationFilter, categoryFilter],
   );
 
   const afterWrite = useCallback(() => requestSyncSoon(), []);
@@ -172,32 +211,24 @@ export const InventoryView = () => {
         onBadgeClick={handleBadgeClick}
       />
 
-      {locations.length > 0 && (
-        <nav className="chips" aria-label="Filtrer par emplacement">
-          <button
-            type="button"
-            className={`chip${locationFilter === null ? " chip--active" : ""}`}
-            onClick={() => setLocationFilter(null)}
-          >
-            Tous
-          </button>
-          {locations.map((location) => (
-            <button
-              key={location}
-              type="button"
-              className={`chip${locationFilter === location ? " chip--active" : ""}`}
-              onClick={() => setLocationFilter((current) => (current === location ? null : location))}
-            >
-              {location}
-            </button>
-          ))}
-        </nav>
-      )}
+      <FilterChips
+        label="Filtrer par emplacement"
+        values={locations}
+        selected={locationFilter}
+        onSelect={setLocationFilter}
+      />
+
+      <FilterChips
+        label="Filtrer par catégorie"
+        values={categories}
+        selected={categoryFilter}
+        onSelect={setCategoryFilter}
+      />
 
       <main className="app-main">
         <ItemList
           items={filteredItems}
-          filtered={query.trim() !== "" || locationFilter !== null}
+          filtered={query.trim() !== "" || locationFilter !== null || categoryFilter !== null}
           query={query}
           onAdjust={(item, delta) => void handleAdjust(item, delta)}
           onOpenQuantity={setQtyItem}
