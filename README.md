@@ -51,6 +51,25 @@ make frontend       # Vite          → http://localhost:5173 (proxy /api → lo
 
 Les migrations sont appliquées automatiquement au démarrage du backend (et manuellement via `make db-migrate`).
 
+## Jeu de test réel (import depuis la prod)
+
+Pour développer avec les vraies données du serveur distant (le journal d'opérations seulement —
+l'état est reconstruit localement par le fold) :
+
+```bash
+node frontend/scripts/export-remote-ops.mjs https://<ton-serveur>   # mot de passe demandé
+# → frontend/public/remote-ops.json (ignoré par git)
+```
+
+Puis dans l'app locale (console du navigateur) :
+
+```js
+await __inventory.importOps(await (await fetch("/remote-ops.json")).json());
+```
+
+L'outil d'import n'existe qu'en dev (`import.meta.env.DEV`) ; un mot de passe déjà connu peut
+aussi être passé au script via `REMOTE_TOKEN=<jwt>` (sans interaction).
+
 ## Commandes
 
 Toutes les commandes passent par le `Makefile` (`make help` liste tout) :

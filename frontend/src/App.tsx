@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { getToken } from "./api/client";
 import { initRepo } from "./db/repo";
 import { startEngine } from "./sync/engine";
+import { ensureEmbeddings } from "./suggest/cache";
+import { getSuggestState, initSuggest, subscribeSuggest } from "./suggest/engine";
 import { InventoryView } from "./views/InventoryView";
 import { LoginView } from "./views/LoginView";
 
@@ -15,12 +17,23 @@ export const App = () => {
   useEffect(() => {
     initRef.current = initRepo()
       .then(() => startEngine())
-      .then(() => {
+      .then(async () => {
+        // Recharge le moteur de suggestions depuis le cache si activé précédemment.
+        await initSuggest();
         // Session déjà présente au chargement : l'init terminée, on entre dans l'inventaire
         // (le splashscreen ne doit jamais rester bloqué ; token expiré → badge "Session expirée").
         if (getToken() !== null) setPhase("ready");
       });
   }, []);
+
+  // Moteur prêt (boot ou activation) → passe d'embedding des noms sans vecteur.
+  useEffect(
+    () =>
+      subscribeSuggest(() => {
+        if (getSuggestState().status === "ready") void ensureEmbeddings();
+      }),
+    [],
+  );
 
   if (phase === "loading") {
     return (

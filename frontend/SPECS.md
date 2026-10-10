@@ -40,15 +40,16 @@ synchronisation et au lookup de codes-barres inconnus.
 
 ## 3. Données locales (Dexie / IndexedDB)
 
-Base `inventory` (v2 — v1 : un seul `barcode` scalaire par item, migré vers la liste `barcodes`
-lors de l'upgrade) :
+Base `inventory` (v3 — v1 : un seul `barcode` scalaire par item, migré vers la liste `barcodes` ;
+v3 : table `embeddings` neuve, rien à migrer) :
 
 | Table | Champs / index | Rôle |
 |-------|----------------|------|
 | `ops` | `uuid` (PK), `deviceId`, `hlc`, `type`, `entityId`, `payload`, `synced` (0/1), `seq` (null si non synchronisée) | journal local **complet** de toutes les opérations (locales + distantes) |
 | `items` | `id` (PK), `name`, `barcodes` (index multi-entrées), `location`, `category`, `qty`, `deleted`, `createdAt`, `updatedAt`, `fieldHlc` ({name, barcode, location, category}) | **projection** de l'état courant, reconstruite par le fold (§ 4) ; les tombstones y restent (`deleted: 1`, filtrés par l'UI) |
-| `meta` | `key` (PK), `value` | `deviceId`, `cursor` (seq serveur), `hlcWall`, `hlcCounter`, `lastSyncAt` |
+| `meta` | `key` (PK), `value` | `deviceId`, `cursor` (seq serveur), `hlcWall`, `hlcCounter`, `lastSyncAt`, `suggestActive` |
 | `lookups` | `barcode` (PK), `found`, `source`, `name`, `brand`, `quantity`, `imageUrl`, `fetchedAt` | cache local du lookup (§ 7.3) |
+| `embeddings` | `itemId` (PK), `nameHash`, `vector` (ArrayBuffer) | cache des vecteurs d'embeddings des noms (§ 9) — recalculés si `nameHash` ≠ nom normalisé courant |
 
 - `deviceId` : UUID généré une fois par navigateur (stocké dans `meta`) ;
 - identifiants d'items : UUID v4 générés par le client (`crypto.randomUUID()`) — aucune création ne
@@ -172,6 +173,8 @@ Responsive **CSS pur** (media queries) : aucun JS ne lit la taille d'écran.
   code-barres — insensible à la casse/accents, **tous les mots** du terme doivent matcher ;
 - **filtre manquants** : chip « Manquants » (visible si au moins un produit est à 0, à gauche de
   « Fusionner ») — n'affiche que les produits en rupture ; se combine avec les autres filtres ;
+- **action doublons** : chip « Doublons · N » (§ 9.5) à droite de « Fusionner », visible si le
+  moteur de suggestions est activé et qu'il y a au moins 2 produits ;
 - **filtre emplacement** et **filtre catégorie** : chips horizontales défilables (« Tous » + valeurs
   existantes, déduites des données) ; les deux filtres se combinent (ET) avec la recherche ;
 - **état vide** : « Aucun produit. Ajoute ton premier produit ou scanne un code-barres. »
@@ -211,7 +214,9 @@ Pour regrouper des produits pseudo-dupliqués (variantes de parfum, ressaisies) 
 - Champs : **nom** (requis, validation native, autofocus, max 256) ; **emplacement** et **catégorie**
   (`<input list>` + `<datalist>` alimentés par les valeurs existantes — suggestion native, saisie libre,
   max 64) ; **code-barres** affiché (lecture seule ; renseigné par le scan, liste complète en édition) ;
-- création : une op `item.create` (+ éventuelles `item.set` si emplacement/catégorie) ;
+- création : une op `item.create` (+ éventuelles `item.set` si emplacement/catégorie) ; si le
+  moteur de suggestions est activé, **suggestions d'articles similaires** affichées sous le champ
+  nom (§ 9.4) ;
 - édition : une op `item.set` **par champ modifié** (LWW par champ) ;
 - suppression : bouton → modale de confirmation native → `item.delete` ;
 - « Enregistrer » ferme la modale ; en création après un scan, la modale quantité s'ouvre ensuite (§ 7.2).
@@ -221,6 +226,13 @@ Pour regrouper des produits pseudo-dupliqués (variantes de parfum, ressaisies) 
 - **Scan** (icône code-barres) : `display: none` ≥ 768 px ;
 - **Ajout** (icône +) : visible uniquement sur mobile (desktop = bouton du header) ;
 - empilés en bas à droite, au-dessus des safe-areas (PWA).
+
+### 6.7 Paramètres
+
+- Bouton engrenage dans le header (toujours visible) → modale de paramètres (`<dialog>`) ;
+- contenu : état du moteur de suggestions (§ 9.1) — « Désactivé » + « Activer », progression du
+  téléchargement, « Activé — hors ligne » + « Désactiver (supprimer le modèle) », message d'erreur
+  + « Réessayer » en cas d'échec.
 
 ## 7. Scanner de codes-barres
 
@@ -241,7 +253,9 @@ Pour regrouper des produits pseudo-dupliqués (variantes de parfum, ressaisies) 
 3. **code connu** → la modale quantité de l'item s'ouvre au-dessus (adjuster +/−, « Valider ») →
    retour caméra ;
 4. **code inconnu** → lookup en ligne (§ 7.3) → modale de création **pré-remplie** (nom du produit si
-   trouvé, code-barres figé) → « Enregistrer » → modale quantité (qté 0 → +1 direct) → retour caméra ;
+   trouvé, code-barres figé) avec **suggestions d'articles similaires** (§ 9.4) — « Ajouter à cet
+   article » fusionne à la volée, sinon « Enregistrer » → modale quantité (qté 0 → +1 direct) →
+   retour caméra ;
 5. « Terminer » (ou Esc) ferme le scanner ;
 6. dernière étiquette scannée affichée en bas de la modale (« Scanné : 3760… »).
 
@@ -268,7 +282,72 @@ Pour regrouper des produits pseudo-dupliqués (variantes de parfum, ressaisies) 
 - iOS : `apple-touch-icon` (SVG accepté), affichage standalone supporté nativement ;
 - robots : `<meta name="robots" content="noindex">` + `robots.txt` Disallow (app privée).
 
-## 9. Thème sombre (tokens oklch)
+## 9. Suggestions intelligentes (embeddings en navigateur)
+
+Détection de produits pseudo-dupliqués (variantes de parfum, ressaisies) et suggestions à la
+création — le modèle tourne **dans le navigateur**, le backend est inchangé.
+
+### 9.1 Moteur
+
+- Modèle **Xenova/multilingual-e5-small** (int8 ≈ 118 Mo) exécuté dans le navigateur via
+  `@huggingface/transformers` (WASM) — dynamic import, chunk lazy **jamais chargé au boot** ;
+- poids **self-hostés** dans `public/models/e5-small/` (ignorés par git, téléchargés via
+  `npm run fetch-model`) ; binaires wasm d'ONNX Runtime packagés par Vite depuis node_modules ;
+  **aucun CDN au runtime** — tout est en cache SW (`/models/*` + `/assets/*` cache-first) →
+  100 % offline après activation ;
+- **activation explicite** (Paramètres, § 6.7) : « Désactivé » par défaut → téléchargement avec
+  progression → « Activé — hors ligne » ; « Désactiver » purge les entrées de Cache Storage
+  correspondantes (`/models/*` + binaires `ort-wasm*`) ; l'état persiste en `meta`
+  (`suggestActive`) ;
+- `embed(text, kind)` : préfixes e5 (`query:` = saisie en cours, `passage:` = noms de la base),
+  mean pooling + normalisation, appels sérialisés (une session wasm).
+
+### 9.2 Cache des vecteurs (§ 3, table `embeddings`)
+
+- **pass incrémental** (`ensureEmbeddings`) : au démarrage (si activé) et **après chaque sync** ;
+  vectorise les noms sans vecteur à jour (invalidation par hash = nom normalisé), purge les
+  vecteurs d'items supprimés ; ~30–80 ms/nom en WASM, en tâche de fond.
+
+### 9.3 Scores (calibrés sur données réelles)
+
+- **recentrage** (anti-fond-de-domaine) : sur des noms courts, un fond sémantique commun gonfle
+  tous les cosinus (plancher ~0.82 mesuré sur la vraie base) — les vecteurs sont recentrés avant
+  toute comparaison (soustraction du centroïde du corpus + renormalisation ; la requête de
+  création est recentrée avec le même centroïde) → plancher ~0 ;
+- **sémantique** : cosinus sur vecteurs recentrés ; **lexical** : Dice sur bigrammes du nom
+  normalisé ; score final = **max des deux**, sous **veto de préfixe** : si le début du libellé
+  (16 premiers caractères normalisés) est trop différent (Dice < 0.5), le score est plafonné —
+  deux articles du même produit partagent le début de leur nom, alors qu'un long libellé commun
+  avec un début différent signale des produits distincts (« Pâtes Coquillette **au blé complet
+  sachet de 500g** » ~ « Pâtes Farfalle… » vs « Liquide vaisselle **citron/lavande** ») ;
+- seuils (cf. `backend/scripts/calibrate-similarity.mjs`) : doublons **0.70**, suggestions à la
+  création **0.65** (top 3) — vrais doublons ≥ ~0.74, bruit ≤ ~0.64 ; le veto élimine aussi les
+  produits partageant un mot-clé avec un début différent (« gel » / « sel » régénérant).
+
+### 9.4 Suggestions à la création
+
+- Modale de création, sous le champ nom (saisie manuelle **ou** remplie par le lookup scan) :
+  top-3 des articles existants similaires, débouncées de 400 ms (nom ≥ 3 caractères) ;
+- suggestion : nom, emplacement · catégorie · quantité, score ; tap → détail (codes-barres
+  inclus) → « **Ajouter à cet article** » : op `item.barcodes.set` (l'existant absorbe le code
+  scanné, ssi nouveau) puis **modale quantité sur l'existant** — ISO avec le flux scan → produit
+  trouvé ; « Enregistrer » reste disponible (création normale).
+
+### 9.5 Doublons dans l'interface
+
+- Chip « **Doublons · N** » à côté de « Fusionner » (visible si moteur activé et ≥ 2 articles) — N =
+  nombre de groupes détectés ;
+- **groupes** = composantes connexes du graphe de similarité (une arête = paire au-dessus du
+  seuil) : 3 articles ou plus mutuellement proches forment **un seul groupe**, fusionnable d'un
+  coup (le survivant est le premier de la liste) ; le score affiché est le meilleur lien interne ;
+- groupes **calculés en mémoire** (données dérivées — jamais stockées en DB), recalculés
+  réactivement à chaque changement (ajout, renommage, fusion, suppression) — le cas « doublon
+  raté à la création » est donc couvert automatiquement ;
+- modale « Doublons potentiels » : groupes triés par score (un bloc par article : nom, emplacement,
+  catégorie, stock) ; tap « Fusionner » → modale de fusion (§ 6.3) préremplie avec le groupe —
+  **aucune modification sans action explicite** (un faux positif n'a aucun effet de bord).
+
+## 10. Thème sombre (tokens oklch)
 
 ```css
 :root {
@@ -291,16 +370,19 @@ Pour regrouper des produits pseudo-dupliqués (variantes de parfum, ressaisies) 
 - contrastes AA minimum (texte/fond, disabled à éviter — utiliser `aria-disabled` + désactivation réelle) ;
 - scrollbars stylées discrètes ; pas d'animation d'apparition superflue.
 
-## 10. Tests (Vitest + Testing Library)
+## 11. Tests (Vitest + Testing Library)
 
 - **fold** (cœur critique) : convergence — même état après permutation aléatoire des ops ; LWW par champ ;
-  plancher 0 ; déduplication de création par code-barres ; tombstones ;
+  plancher 0 ; unicité multi-code-barres ; tombstones ;
 - **HLC** : monotonie locale, réception d'op distante, encodage triable ;
 - **recherche** : accents/casse, multi-mots, code-barres ;
-- **composants** : `ItemRow` (rendu + callbacks +/−), `QuantityDialog` (delta, validation, plancher) ;
+- **scores** : cosinus, Dice, hybride, classement des suggestions et des paires de doublons ;
+- **composants** : `ItemRow` (rendu + callbacks +/− + sélection fusion), `QuantityDialog` (delta,
+  validation, plancher), `ItemFormDialog` (suggestions debouncées, fusion à la volée) ;
+- migration Dexie `migrateItemV1ToV2` (fonction pure) ;
 - moteur de sync : testé via le fold + mocks fetch (push/pull/idempotence) — léger, le backend teste le contrat.
 
-## 11. Glossaire
+## 12. Glossaire
 
 | Terme | Définition |
 |-------|-----------|

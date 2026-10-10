@@ -5,6 +5,12 @@ node_modules/
 frontend/dist/
 backend/public/
 
+# Modèle d'embeddings (téléchargé via `npm run fetch-model`, cf. frontend/SPECS.md § 9)
+frontend/public/models/
+
+# Export du journal distant (jeu de test, cf. frontend/scripts/export-remote-ops.mjs)
+frontend/public/remote-ops.json
+
 # Environnement local (secrets)
 .env
 .env.local

@@ -19,6 +19,15 @@ export interface LookupRow {
   fetchedAt: number;
 }
 
+/** Cache du vecteur d'embedding du nom d'un item (suggestions de doublons, cf. SPECS.md § 9). */
+export interface EmbeddingRow {
+  itemId: string;
+  /** Nom normalisé au moment du calcul — une row obsolète si différent du nom courant. */
+  nameHash: string;
+  /** Float32Array normalisée, sérialisée en ArrayBuffer (384 dims pour e5-small). */
+  vector: ArrayBuffer;
+}
+
 /**
  * Migration v1 → v2 (mutale, testée unitairement) : l'ancien champ scalaire `barcode` devient la
  * liste `barcodes` (multi-association de codes-barres pour la fusion).
@@ -33,6 +42,7 @@ export class InventoryDb extends Dexie {
   items!: Table<Item, string>;
   meta!: Table<MetaRow, string>;
   lookups!: Table<LookupRow, string>;
+  embeddings!: Table<EmbeddingRow, string>;
 
   constructor() {
     super("inventory");
@@ -54,6 +64,14 @@ export class InventoryDb extends Dexie {
       .upgrade(async (tx) => {
         await tx.table("items").toCollection().modify(migrateItemV1ToV2);
       });
+    // v3 : cache des vecteurs d'embeddings des noms (suggestions) — table neuve, rien à migrer.
+    this.version(3).stores({
+      ops: "uuid, synced, hlc",
+      items: "id, *barcodes, location, category",
+      meta: "key",
+      lookups: "barcode",
+      embeddings: "itemId",
+    });
   }
 }
 

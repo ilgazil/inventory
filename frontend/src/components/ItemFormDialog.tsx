@@ -1,8 +1,11 @@
 // Modale création/édition d'item (native <dialog>, validation de formulaire native).
 // Édition → une op item.set par champ modifié (diff fait par le parent).
-import { useState } from "react";
+// En création : suggestions d'articles existants similaires (moteur sémantique, § 9) avec
+// fusion à la volée — l'article existant absorbe le code-barres scanné, puis modale quantité.
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { Item } from "../entities/types";
+import type { Suggestion } from "../suggest/score";
 import { TrashIcon } from "./icons";
 import { useDialog } from "./useDialog";
 
@@ -17,12 +20,17 @@ const SOURCE_LABELS: Record<string, string> = {
   openproductsfacts: "Trouvé sur Open Products Facts",
 };
 
+const SUGGESTION_DEBOUNCE_MS = 400;
+const SUGGESTION_MIN_LENGTH = 3;
+
 export const ItemFormDialog = ({
   open,
   item,
   prefill,
   locations,
   categories,
+  findSuggestions,
+  onMergeWith,
   onClose,
   onSave,
   onDelete,
@@ -33,6 +41,10 @@ export const ItemFormDialog = ({
   prefill: { name?: string; barcode?: string; source?: string } | null;
   locations: string[];
   categories: string[];
+  /** Suggestions d'articles existants (moteur activé uniquement — absent sinon). */
+  findSuggestions?: (name: string) => Promise<Suggestion[]>;
+  /** Choix d'une suggestion : l'existant absorbe le code-barres, puis modale quantité. */
+  onMergeWith?: (existing: Item, barcode: string) => void;
   onClose: () => void;
   onSave: (draft: ItemDraft) => void;
   onDelete?: () => void;
@@ -44,6 +56,26 @@ export const ItemFormDialog = ({
   const [name, setName] = useState(item?.name ?? prefill?.name ?? "");
   const [location, setLocation] = useState(item?.location ?? "");
   const [category, setCategory] = useState(item?.category ?? "");
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isCreate || !findSuggestions) return undefined;
+    if (name.trim().length < SUGGESTION_MIN_LENGTH) {
+      setSuggestions([]);
+      setExpandedId(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      findSuggestions(name)
+        .then((results) => {
+          setSuggestions(results);
+          setExpandedId(null);
+        })
+        .catch(() => setSuggestions([]));
+    }, SUGGESTION_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [name, isCreate, findSuggestions]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -65,9 +97,7 @@ export const ItemFormDialog = ({
             {barcodes.map((code) => (
               <code key={code}>{code}</code>
             ))}
-            {prefill?.source && (
-              <span className="form-barcode-source">{SOURCE_LABELS[prefill.source] ?? ""}</span>
-            )}
+            {prefill?.source && <span className="form-barcode-source">{SOURCE_LABELS[prefill.source] ?? ""}</span>}
           </p>
         )}
 
@@ -85,6 +115,63 @@ export const ItemFormDialog = ({
             placeholder="Ex. : Lessic Pur"
           />
         </label>
+
+        {suggestions.length > 0 && (
+          <div className="suggestions" aria-label="Articles similaires">
+            <span className="suggestions-title">Articles similaires</span>
+            {suggestions.map(({ item: existing, score }) =>
+              expandedId === existing.id ? (
+                <div key={existing.id} className="suggestion-detail">
+                  <span className="suggestion-name">{existing.name}</span>
+                  <span className="suggestion-meta">
+                    {[
+                      existing.location,
+                      existing.category,
+                      `${existing.qty} en stock`,
+                      `similarité ${Math.round(score * 100)} %`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                  {existing.barcodes.length > 0 && (
+                    <span className="suggestion-meta">Codes : {existing.barcodes.join(", ")}</span>
+                  )}
+                  <div className="suggestion-actions">
+                    <button
+                      type="button"
+                      className="btn btn--accent"
+                      onClick={() => onMergeWith?.(existing, prefill?.barcode ?? "")}
+                    >
+                      Ajouter à cet article
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => setExpandedId(null)}
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  key={existing.id}
+                  type="button"
+                  className="suggestion"
+                  onClick={() => setExpandedId(existing.id)}
+                >
+                  <span className="suggestion-name">{existing.name}</span>
+                  <span className="suggestion-meta">
+                    {[existing.location, existing.category, `${existing.qty} en stock`]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                  <span className="suggestion-score">{Math.round(score * 100)} %</span>
+                </button>
+              ),
+            )}
+          </div>
+        )}
 
         <label className="field">
           <span className="field-label">Emplacement</span>

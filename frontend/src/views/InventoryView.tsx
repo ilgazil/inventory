@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useSyncExternalStore } from "react";
 import { lookupBarcode } from "../api/lookup";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DuplicatesDialog } from "../components/DuplicatesDialog";
 import { Fabs } from "../components/Fabs";
 import { Header } from "../components/Header";
 import { ItemFormDialog } from "../components/ItemFormDialog";
@@ -14,11 +15,20 @@ import { MergeDialog } from "../components/MergeDialog";
 import type { MergeDraft } from "../components/MergeDialog";
 import { QuantityDialog } from "../components/QuantityDialog";
 import { ScannerDialog } from "../components/ScannerDialog";
+import { SettingsDialog } from "../components/SettingsDialog";
 import { db } from "../db/db";
 import { findItemByBarcode, recordOp } from "../db/repo";
 import { applyOp } from "../entities/fold";
 import { compareItems, matchesQuery, normalizeText } from "../entities/search";
 import type { CreatePayload, Item, SettableField } from "../entities/types";
+import { embed, getSuggestState, subscribeSuggest } from "../suggest/engine";
+import {
+  centerVector,
+  centerVectors,
+  findDuplicateGroups,
+  rankSuggestions,
+} from "../suggest/score";
+import type { DuplicateGroup, Suggestion } from "../suggest/score";
 import { getSyncSnapshot, requestSync, requestSyncSoon, subscribeSync } from "../sync/engine";
 import { LoginView } from "./LoginView";
 
@@ -79,7 +89,23 @@ export const InventoryView = () => {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerStatus, setScannerStatus] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
+  const [mergePair, setMergePair] = useState<Item[] | null>(null);
   const sync = useSyncExternalStore(subscribeSync, getSyncSnapshot);
+  const suggest = useSyncExternalStore(subscribeSuggest, getSuggestState);
+
+  /** Vecteurs bruts en cache (moteur de suggestions) — recalculés par le pass incrémental. */
+  const vectors = useLiveQuery(
+    async () => {
+      const rows = await db.embeddings.toArray();
+      return new Map(rows.map((row) => [row.itemId, new Float32Array(row.vector)]));
+    },
+    [],
+    new Map<string, Float32Array>(),
+  );
+  /** Espace recentré : retire le fond sémantique commun avant toute comparaison (§ 9.3). */
+  const space = useMemo(() => centerVectors(vectors), [vectors]);
 
   const locations = useMemo(
     () =>
@@ -97,6 +123,12 @@ export const InventoryView = () => {
   );
 
   const missingCount = useMemo(() => items.filter((item) => item.qty === 0).length, [items]);
+
+  /** Groupes de doublons potentiels — dérivés en mémoire (composantes connexes), jamais stockés. */
+  const duplicateGroups = useMemo(
+    () => (suggest.status === "ready" ? findDuplicateGroups(items, space.vectors) : []),
+    [items, space, suggest.status],
+  );
 
   const filteredItems = useMemo(
     () =>
@@ -143,15 +175,14 @@ export const InventoryView = () => {
    * Ordre des ops : suppression des absorbés (libère leurs codes-barres) → cumul des codes-barres
    * → champs édités → quantité (ajustement delta). Toutes enregistrées localement puis sync.
    */
-  const handleMerge = useCallback(
-    async (draft: MergeDraft) => {
-      setMergeOpen(false);
-      if (selectedItems.length < 2) return;
-      const survivor = selectedItems[0]!;
-      for (const item of selectedItems.slice(1)) {
+  const runMerge = useCallback(
+    async (targets: readonly Item[], draft: MergeDraft) => {
+      if (targets.length < 2) return;
+      const survivor = targets[0]!;
+      for (const item of targets.slice(1)) {
         await recordOp({ type: "item.delete", entityId: item.id, payload: {} });
       }
-      const barcodes = [...new Set(selectedItems.flatMap((item) => item.barcodes))];
+      const barcodes = [...new Set(targets.flatMap((item) => item.barcodes))];
       if (barcodes.join("\n") !== survivor.barcodes.join("\n")) {
         await recordOp({
           type: "item.barcodes.set",
@@ -176,9 +207,47 @@ export const InventoryView = () => {
       }
       setMergeMode(false);
       setSelectedIds(new Set());
+      setMergePair(null);
       afterWrite();
     },
-    [selectedItems, afterWrite],
+    [afterWrite],
+  );
+
+  const handleMerge = useCallback(
+    async (draft: MergeDraft) => {
+      setMergeOpen(false);
+      await runMerge(selectedItems, draft);
+    },
+    [selectedItems, runMerge],
+  );
+
+  /** Fusion à la volée depuis une suggestion à la création : l'existant absorbe le code scanné,
+   * puis la modale quantité s'ouvre sur lui (ISO avec le flux scan → produit trouvé). */
+  const handleMergeWithExisting = useCallback(
+    async (existing: Item, barcode: string) => {
+      setForm({ mode: "closed" });
+      if (barcode !== "" && !existing.barcodes.includes(barcode)) {
+        await recordOp({
+          type: "item.barcodes.set",
+          entityId: existing.id,
+          payload: { barcodes: [...existing.barcodes, barcode] },
+        });
+      }
+      const fresh = await db.items.get(existing.id);
+      setQtyItem(fresh && !fresh.deleted ? fresh : existing);
+      afterWrite();
+    },
+    [afterWrite],
+  );
+
+  /** Suggestions d'articles similaires pour le nom saisi (vecteurs recentrés). */
+  const findSuggestions = useCallback(
+    async (name: string): Promise<Suggestion[]> => {
+      if (suggest.status !== "ready") return [];
+      const queryVector = centerVector(await embed(name, "query"), space.centroid);
+      return rankSuggestions(name, queryVector, items, space.vectors);
+    },
+    [items, space, suggest.status],
   );
 
   const handleAdjust = useCallback(
@@ -287,6 +356,7 @@ export const InventoryView = () => {
         onQueryChange={setQuery}
         onAdd={openCreate}
         onBadgeClick={handleBadgeClick}
+        onSettings={() => setSettingsOpen(true)}
       />
 
       {(missingCount > 0 || items.length >= 2 || mergeMode) && (
@@ -309,6 +379,11 @@ export const InventoryView = () => {
           >
             {mergeMode ? `Fusionner · ${selectedItems.length}` : "Fusionner"}
           </button>
+          {suggest.status === "ready" && items.length >= 2 && (
+            <button type="button" className="chip" onClick={() => setDuplicatesOpen(true)}>
+              {duplicateGroups.length > 0 ? `Doublons · ${duplicateGroups.length}` : "Doublons"}
+            </button>
+          )}
         </nav>
       )}
 
@@ -376,6 +451,8 @@ export const InventoryView = () => {
           prefill={form.mode === "create" ? form.prefill : null}
           locations={locations}
           categories={categories}
+          findSuggestions={suggest.status === "ready" ? findSuggestions : undefined}
+          onMergeWith={(existing, barcode) => void handleMergeWithExisting(existing, barcode)}
           onClose={() => setForm({ mode: "closed" })}
           onSave={(draft) => void handleSaveForm(draft)}
           onDelete={
@@ -409,6 +486,30 @@ export const InventoryView = () => {
           onConfirm={(draft) => void handleMerge(draft)}
         />
       )}
+
+      {mergePair !== null && mergePair.length >= 2 && (
+        <MergeDialog
+          open
+          items={mergePair}
+          locations={locations}
+          categories={categories}
+          onClose={() => setMergePair(null)}
+          onConfirm={(draft) => void runMerge(mergePair, draft)}
+        />
+      )}
+
+      <DuplicatesDialog
+        open={duplicatesOpen}
+        groups={duplicateGroups}
+        onClose={() => setDuplicatesOpen(false)}
+        onMergeGroup={(group: DuplicateGroup) => {
+          setDuplicatesOpen(false);
+          // Le survivant est le premier de la liste (ordre alphabétique), comme pour la fusion.
+          setMergePair([...group.items].sort(compareItems));
+        }}
+      />
+
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       <ScannerDialog
         open={scannerOpen}

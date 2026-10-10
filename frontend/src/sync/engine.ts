@@ -12,6 +12,7 @@ import {
 } from "../db/repo";
 import { setMeta } from "../db/meta";
 import type { Op, StoredOp } from "../entities/types";
+import { ensureEmbeddings } from "../suggest/cache";
 
 export type SyncState = "idle" | "syncing" | "synced" | "offline" | "error" | "auth-expired";
 
@@ -97,6 +98,8 @@ const runSync = async (): Promise<void> => {
     await pushPending();
     await pullNew();
     await rebuildProjection();
+    // Recalcule les vecteurs des noms nouveaux/modifiés (suggestions) — sans effet si inactif.
+    void ensureEmbeddings();
     const lastSyncAt = Date.now();
     await setMeta("lastSyncAt", lastSyncAt);
     setSnapshot({ state: "synced", lastSyncAt });

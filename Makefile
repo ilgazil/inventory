@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install backend frontend db-up db-down db-migrate test test-backend test-frontend lint lint-backend lint-frontend format build check deploy deploy-dry
+.PHONY: help install backend frontend db-up db-down db-migrate test test-backend test-frontend lint lint-backend lint-frontend format build check deploy deploy-dry sync-prod
 
 # Utilise Node 24 via nvm (le Node système peut être plus ancien).
 # Si nvm est absent, la commande tourne avec le Node système en place.
@@ -56,3 +56,8 @@ deploy: check ## Vérifie puis déploie sur la prod (rsync + mot de passe SSH), 
 
 deploy-dry: ## Simule le déploiement (dry-run rsync, rien n'est envoyé)
 	scripts/deploy.sh --dry-run
+
+sync-prod: ## Importe le journal d'ops de la prod dans le backend local (jeu de test réel)
+	@$(NVM); url=$$(grep '^PROD_URL=' .deploy.env 2>/dev/null | cut -d= -f2-); \
+	if [ -z "$$url" ]; then echo "PROD_URL absent de .deploy.env"; exit 1; fi; \
+	node scripts/sync-prod.mjs "$$url"
