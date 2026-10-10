@@ -3,7 +3,7 @@
 // (cf. src/main.tsx) pour fournir un jeu de test réel à l'environnement local.
 //
 // Usage :
-//   node scripts/export-remote-ops.mjs https://mon-site.example.app
+//   node scripts/export-remote-ops.mjs https://mon-inventaire.example.org
 //   (mot de passe demandé de façon interactive — ou REMOTE_PASSWORD en variable d'env)
 //   Avec un jeton déjà connu : REMOTE_TOKEN=xxx node scripts/export-remote-ops.mjs <URL>
 import { createInterface } from "node:readline/promises";

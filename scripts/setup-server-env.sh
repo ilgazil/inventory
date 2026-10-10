@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Crée backend/.env sur le serveur Example (à lancer une seule fois).
+# Crée backend/.env sur le serveur de production (à lancer une seule fois).
 # Les secrets sont saisis ici et écrits directement sur le serveur — rien ne passe par le repo.
 # Le mot de passe SSH vient du trousseau macOS (cf. deploy.sh).
 set -euo pipefail
@@ -16,14 +16,14 @@ source .deploy.env
 : "${PROD_HOST:?}"; : "${PROD_SSH_USER:?}"; : "${PROD_PATH:?}"; PROD_PORT="${PROD_PORT:-22}"
 
 echo "=== Création de ${PROD_PATH}/.env sur ${PROD_HOST} ==="
-read -rp "Hôte MariaDB Example (ex. xxx.myd.example.com) : " DB_HOST
+read -rp "Hôte MariaDB : " DB_HOST
 read -rp "Port MariaDB [3306] : " DB_PORT
 DB_PORT="${DB_PORT:-3306}"
 read -rp "Utilisateur DB : " DB_USER
 read -rsp "Mot de passe DB : " DB_PASSWORD
 echo ""
-read -rp "Nom de la base [REDACTED] : " DB_NAME
-DB_NAME="${DB_NAME:-REDACTED}"
+read -rp "Nom de la base [inventory] : " DB_NAME
+DB_NAME="${DB_NAME:-inventory}"
 read -rsp "Mot de passe de connexion à l'app (login inventaire) : " APP_PASSWORD
 echo ""
 
@@ -58,4 +58,4 @@ EOF
 
 echo "✅ .env créé à la racine du site (chmod 600)."
 $RUN_SSH -p "${PROD_PORT}" "${PROD_SSH_USER}@${PROD_HOST}" "chmod 600 ${PROD_PATH}/.env && ls -l ${PROD_PATH}/.env"
-echo "→ Redémarre ensuite le site dans le Manager Example."
+echo "→ Redémarre ensuite le site dans la console de ton hébergeur."

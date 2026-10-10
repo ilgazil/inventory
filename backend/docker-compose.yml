@@ -1,18 +1,18 @@
-# MariaDB 10.6 locale pour le développement — même version majeure que la prod Example.
+# MariaDB 10.6 locale pour le développement (mêmes identifiants que backend/.env.example).
 services:
   mariadb:
     image: mariadb:10.6
-    container_name: REDACTED-mariadb
+    container_name: inventory-mariadb
     environment:
       MARIADB_ROOT_PASSWORD: root
-      MARIADB_DATABASE: REDACTED
-      MARIADB_USER: REDACTED
-      MARIADB_PASSWORD: REDACTED
+      MARIADB_DATABASE: inventory
+      MARIADB_USER: inventory
+      MARIADB_PASSWORD: inventory
     ports:
       # Port hôte 33060 pour ne pas entrer en conflit avec un MySQL/MariaDB local.
       - "33060:3306"
     volumes:
-      - REDACTED-mariadb-data:/var/lib/mysql
+      - inventory-mariadb-data:/var/lib/mysql
 
 volumes:
-  REDACTED-mariadb-data:
+  inventory-mariadb-data:

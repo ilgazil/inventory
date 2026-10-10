@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Déploiement vers Example (site Node.js) — cf. .deploy.env
+# Déploiement vers le serveur de production — cf. .deploy.env
 #
-# Authentification SSH (clé non supportée sur les sites Node.js — FAQ Example 2054) :
-#   1. mot de passe dans le trousseau macOS : security add-generic-password -s inventory-deploy -a "$USER" -w
+# Authentification SSH (certains hébergeurs de sites Node.js ne supportent pas la clé SSH) :
+#   1. mot de passe dans le trousseau macOS : security add-generic-password -s inventory-deploy -a "<user>" -w
 #   2. sinon PROD_SSH_PASSWORD dans .deploy.env (en clair, gitignoré)
 #   3. sinon : mot de passe demandé interactivement par ssh/rsync
 #
@@ -91,7 +91,11 @@ else
 
 ⚠️  .env ABSENT à la racine du site — l'app ne démarrera pas.
     Crée-le : scripts/setup-server-env.sh (ou voir README.md § Déploiement) :
-      DATABASE_URL=mysql://<user>:<mdp>@<hôte-mariadb-example>:3306/REDACTED
+      DB_HOST=<hôte-mariadb>
+      DB_PORT=3306
+      DB_USER=<utilisateur-db>
+      DB_PASSWORD=<mot-de-passe-db>
+      DB_NAME=inventory
       JWT_SECRET=<openssl rand -hex 32>
       AUTH_PASSWORD_HASH=<node backend/scripts/hash-password.mjs "<mot de passe>">
       NODE_ENV=production
@@ -102,7 +106,6 @@ cat <<'EOF'
 
 ✅ Fichiers envoyés.
 
-⚠️  Dernière étape : redémarre le site dans le Manager Example
-    (Hébergement → ton site Node.js → Redémarrer).
+⚠️  Dernière étape : redémarre le site dans la console de ton hébergeur.
     Les migrations SQL s'appliquent automatiquement au démarrage.
 EOF

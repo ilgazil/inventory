@@ -7,7 +7,7 @@ const main = async (): Promise<void> => {
   const config = loadConfig();
   const pool = createPool(config);
 
-  // Migrations automatiques au démarrage (idempotent) — pratique sur l'hébergement Example,
+  // Migrations automatiques au démarrage (idempotent) — pratique sur l'hébergeur,
   // où le site est redémarré depuis le Manager après chaque déploiement.
   const applied = await runMigrations(config.database);
   if (applied.length > 0) {

@@ -1,5 +1,5 @@
 // Parsing/validation des variables d'environnement.
-// Aucune valeur en dur : tout vient de l'environnement (fichier .env en dev, Manager Example en prod).
+// Aucune valeur en dur : tout vient de l'environnement (fichier .env en dev, l'hébergeur en prod).
 
 const required = (name: string): string => {
   const value = process.env[name];

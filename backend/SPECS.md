@@ -26,9 +26,9 @@ La convergence est garantie par le repli déterministe des opérations, effectu�
 
 | Élément | Choix | Raison |
 |---------|-------|--------|
-| Runtime | **Node.js 24 (LTS)** | LTS (support jusqu'en 2028) ; Example le préconise. TypeScript exécuté nativement (type stripping), `tsc --noEmit` pour le typecheck |
+| Runtime | **Node.js 24 (LTS)** | LTS (support jusqu'en 2028). TypeScript exécuté nativement (type stripping), `tsc --noEmit` pour le typecheck |
 | Framework | **Express 5** | minimal, éprouvé, suffisant pour 6 endpoints |
-| Base | **MariaDB 10.6.28** | fournie par l'hébergement Example ; dev locale via docker `mariadb:10.6` |
+| Base | **MariaDB 10.6** | dev locale via docker `mariadb:10.6` |
 | Driver DB | **mysql2** (pool) | 100 % JS pur |
 | Validation | **zod** | validation stricte des payloads d'opérations |
 | Auth | **jsonwebtoken + bcryptjs** | 100 % JS purs (pas de bcrypt natif → aucun node-gyp sur l'hébergement) |
@@ -71,12 +71,12 @@ backend/
 
 | Variable | Requis | Description |
 |----------|--------|-------------|
-| `PORT` | non (déf. `3000`) | port d'écoute ; **fourni par Example en prod** (cf. § 9) |
+| `PORT` | non (déf. `3000`) | port d'écoute ; **fourni par l'hébergeur en prod** (cf. § 9) |
 | `DB_HOST` | oui* | hôte MariaDB |
 | `DB_PORT` | non (déf. `3306`) | port MariaDB |
 | `DB_USER` | oui* | utilisateur DB |
 | `DB_PASSWORD` | oui* | mot de passe DB — **brut, sans encodage** (%, @, : autorisés) |
-| `DB_NAME` | oui* | nom de la base (`REDACTED`) |
+| `DB_NAME` | oui* | nom de la base |
 | `DATABASE_URL` | non | alternative legacy `mysql://user:pass@host:3306/db` — décodage tolérant (un % brut ne crashe pas) ; les `DB_*` ont priorité |
 | `JWT_SECRET` | oui | secret HS256 (≥ 32 caractères aléatoires) |
 | `AUTH_PASSWORD_HASH` | oui | hash bcrypt du mot de passe unique (`$2a$...`) |
@@ -263,30 +263,29 @@ depuis la Suisse). Nom normalisé : `product_name` (ou `product_name_fr`, ou `pr
 - JSON body limit : **256 kB** (les lots d'ops sont petits) ; `/api/sync/push` accepte aussi `text/plain` ? **Non** — `application/json` uniquement ;
 - pas de middleware CORS : le frontend est same-origin (en dev, le proxy Vite rend l'origine identique).
 
-## 9. Déploiement Example (site Node.js)
+## 9. Déploiement (hébergeur Node.js + MariaDB)
 
-Vérifié d'après les FAQ Example 2537 / 2535 / 2054 :
+Conventions indépendantes de l'hébergeur (les accès vivent dans `.deploy.env`, gitignoré) :
 
-1. **Manager** → Hébergement → Ajouter → *projet avec technologies avancées* → **Node.js**,
-   méthode **personnalisée** (import du code par SSH/rsync), domaine ou sous-domaine dédié ;
-2. **Paramètres avancés** (onglet Node.js) :
+1. **Site Node.js** (Node 24) avec un domaine dédié, code importé par SSH/rsync ;
+2. **Paramètres** :
    - dossier d'exécution : **la racine du site** (`./` — là où rsync dépose `package.json`, `src/`,
      `node_modules/` et `public/`) ;
    - version Node : **24** ;
    - commande de construction : vide (aucun build serveur — le frontend est buildé localement) ;
    - commande de lancement : `npm start` (= `node --env-file-if-exists=.env src/server.ts`, type
      stripping natif Node 24) ;
-   - port d'écoute : le port dynamique fourni par le Manager — le code écoute sur `process.env.PORT` ;
+   - port d'écoute : le port dynamique fourni par l'hébergeur — le code écoute sur `process.env.PORT` ;
    - **variables d'environnement : dans un `.env` à la racine du site** (créé via SSH, cf. README §
      Déploiement, ou `scripts/setup-server-env.sh`) — jamais dans le repo ni dans `.deploy.env` :
-     `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` (base `REDACTED` Example), `JWT_SECRET`,
-     `AUTH_PASSWORD_HASH`, `NODE_ENV=production`. `PORT` est injecté par le Manager ;
+     `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`, `JWT_SECRET`,
+     `AUTH_PASSWORD_HASH`, `NODE_ENV=production`. `PORT` est injecté par l'hébergeur ;
 3. **Déploiement** : `scripts/deploy.sh` = rsync de `backend/` (src, package.json, node_modules, public)
-   vers `PROD_PATH` + rappel de redémarrer le site dans le Manager. **Mot de passe SSH à chaque fois**
-   (clé SSH non supportée pour les sites Node.js, FAQ 2054) ;
-4. **MariaDB** : base créée dans le Manager (Example), `DATABASE_URL` pointe vers l'hôte DB Example ;
+   vers `PROD_PATH` + rappel de redémarrer le site. **Mot de passe SSH à chaque fois** si l'hébergeur
+   ne supporte pas la clé SSH pour les sites Node.js ;
+4. **MariaDB** : base créée chez l'hébergeur, `DB_*` pointent vers l'hôte DB ;
    les migrations s'appliquent automatiquement au (re)démarrage ;
-5. HTTPS : certificat Let's Encrypt via le Manager (obligatoire pour l'installation PWA et `getUserMedia`).
+5. HTTPS : certificat fourni par l'hébergeur (obligatoire pour l'installation PWA et `getUserMedia`).
 
 ## 10. Sécurité
 
@@ -295,7 +294,7 @@ Vérifié d'après les FAQ Example 2537 / 2535 / 2054 :
 - JWT HS256, secret ≥ 32 caractères, 90 jours, transport HTTPS uniquement ;
 - validation zod stricte de toute entrée (ops, barcode, query params) ; `payload` limité aux champs
   attendus (`value` ≤ 512 chars, `name` ≤ 256, strings trimmées non vides quand requis) ;
-- pas de cookie, pas de session serveur : stateless, redémarrage Example sans impact ;
+- pas de cookie, pas de session serveur : stateless, redémarrage du serveur sans impact ;
 - app privée : `<meta name="robots" content="noindex">` côté frontend + `robots.txt` Disallow.
 
 ## 11. Tests (`node:test`)

@@ -4,7 +4,7 @@
 // L'app locale reçoit ensuite tout via sa synchronisation normale (fold → état reconstruit).
 //
 // Usage :
-//   node scripts/sync-prod.mjs https://mon-site.example.app [http://localhost:3000]
+//   node scripts/sync-prod.mjs https://mon-inventaire.example.org [http://localhost:3000]
 // Authentification des deux côtés : REMOTE_TOKEN / LOCAL_TOKEN en variable d'env, sinon
 // le mot de passe est demandé de façon interactive (jamais affiché ni stocké).
 import { createInterface } from "node:readline/promises";

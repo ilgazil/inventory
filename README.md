@@ -8,7 +8,7 @@ et se resynchronise dès la connexion retrouvée.
 
 Application web full-stack composée d'un backend **Node.js 24 (Express 5)** et d'un frontend
 **React 19 + Vite + TypeScript (PWA)**. En production, le build du frontend est copié dans `backend/public`
-(monolithe servi par Express). Les données vivent dans une base **MariaDB 10.6** (Example) sous forme de
+(monolithe servi par Express). Les données vivent dans une base **MariaDB 10.6** sous forme de
 journal d'opérations ; chaque appareil garde une copie locale (IndexedDB) et converge vers le même état
 grâce à un repli déterministe. Interface entièrement en français, thème sombre unique.
 
@@ -94,10 +94,10 @@ Toutes les commandes passent par le `Makefile` (`make help` liste tout) :
 
 | Variable | Description |
 |----------|-------------|
-| `PORT` | port d'écoute (3000 en dev ; fourni par Example en prod) |
-| `DB_HOST` / `DB_PORT` | hôte et port MariaDB (déf. `3306`) — en prod : ton hôte Example |
-| `DB_USER` / `DB_PASSWORD` / `DB_NAME` | identifiants DB — **bruts, sans encodage** (%, @, : autorisés dans le mot de passe) ; en dev : `REDACTED`/`REDACTED`/`REDACTED` |
-| `DATABASE_URL` | (alternative legacy) `mysql://user:pass@host:3306/REDACTED` — les `DB_*` ont priorité |
+| `PORT` | port d'écoute (3000 en dev ; fourni par l'hébergeur en prod) |
+| `DB_HOST` / `DB_PORT` | hôte et port MariaDB (déf. `3306`) — en prod : ton hôte MariaDB |
+| `DB_USER` / `DB_PASSWORD` / `DB_NAME` | identifiants DB — **bruts, sans encodage** (%, @, : autorisés dans le mot de passe) ; en dev : `inventory`/`inventory`/`inventory` (docker-compose) |
+| `DATABASE_URL` | (alternative legacy) `mysql://user:pass@host:3306/inventory` — les `DB_*` ont priorité |
 | `JWT_SECRET` | secret de signature des tokens de session (≥ 32 caractères aléatoires) |
 | `AUTH_PASSWORD_HASH` | hash bcrypt du mot de passe unique (généré par `backend/scripts/hash-password.mjs`) |
 | `NODE_ENV` | `development` / `production` |
@@ -114,12 +114,12 @@ Aucune variable : l'app appelle l'API en relatif (`/api/...`) — proxifiée par
 | `PROD_PATH` | dossier du site Node.js côté serveur |
 | `PROD_URL` | (optionnel) URL publique, affichée dans le récapitulatif de déploiement |
 
-> ⚠️ Les sites Node.js Example **ne supportent pas la connexion par clé SSH** (FAQ 2054) :
-> le mot de passe SSH est nécessaire à chaque déploiement. Pour ne pas le retaper (ni le stocker en
-> clair), enregistre-le une fois dans le trousseau macOS :
+> ⚠️ Certains hébergeurs de sites Node.js **ne supportent pas la connexion par clé SSH** :
+> le mot de passe SSH est alors nécessaire à chaque déploiement. Pour ne pas le retaper (ni le
+> stocker en clair), enregistre-le une fois dans le trousseau macOS :
 
 ```bash
-security add-generic-password -s inventory-deploy -a REDACTED -w
+security add-generic-password -s inventory-deploy -a "<PROD_SSH_USER>" -w
 ```
 
 (Alternative : `PROD_SSH_PASSWORD=…` dans `.deploy.env`, en clair.)
@@ -147,7 +147,7 @@ make check           # lint + tests + build
 
 ## Déploiement
 
-1. Dans le Manager Example : créer un **site Node.js** (Node 24, méthode personnalisée) — voir
+1. Créer un **site Node.js** (Node 24) chez ton hébergeur avec une base MariaDB — voir
    `backend/SPECS.md` § Déploiement pour les commandes build/start et le port.
 2. Créer le **`.env` de production sur le serveur** (une seule fois) — il ne vit jamais dans le repo.
    Le plus simple : `scripts/setup-server-env.sh` (demande hôte/utilisateur/mot de passe DB + mot de
@@ -159,26 +159,22 @@ make check           # lint + tests + build
    ```
 
    ```bash
-   ssh REDACTED@ssh.example.com "cat > sites/inventaire.example.com/.env" <<'EOF'
-DB_HOST=<hôte-mariadb-example>
+   ssh <user>@<hôte> "cat > <chemin-du-site>/.env" <<'EOF'
+DB_HOST=<hôte-mariadb>
 DB_PORT=3306
 DB_USER=<utilisateur-db>
 DB_PASSWORD=<mot-de-passe-db>
-DB_NAME=REDACTED
+DB_NAME=inventory
 JWT_SECRET=<sortie de openssl rand -hex 32>
 AUTH_PASSWORD_HASH=<sortie de hash-password.mjs>
 NODE_ENV=production
 EOF
    ```
 
-   Le port n'est pas à renseigner : `PORT` est injecté par le Manager. Les migrations s'appliquent
-   automatiquement au démarrage du backend.
-
-   Le port n'est pas à renseigner : `PORT` est injecté par le Manager. Les migrations s'appliquent
-   automatiquement au démarrage du backend.
-3. `cp .deploy.env.example .deploy.env` puis renseigner les accès (fait — accès SSH identiques à `listen`).
-4. `make deploy-dry` pour simuler, `make deploy` pour déployer (rsync + redémarrage de l'app via le
-   Manager). Le déploiement exige un **arbre git propre**.
+3. `cp .deploy.env.example .deploy.env` puis renseigner les accès.
+4. `make deploy-dry` pour simuler, `make deploy` pour déployer (rsync + redémarrage de l'app).
+   Le déploiement exige un **arbre git propre**. Les migrations s'appliquent automatiquement au
+   démarrage du backend.
 
 ## Documentation
 

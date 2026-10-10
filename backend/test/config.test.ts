@@ -3,21 +3,21 @@ import assert from "node:assert/strict";
 import { parseDbUrl } from "../src/config.ts";
 
 test("parseDbUrl : URL simple", () => {
-  assert.deepEqual(parseDbUrl("mysql://user:pass@host.example.com:3307/REDACTED"), {
-    host: "host.example.com",
+  assert.deepEqual(parseDbUrl("mysql://user:pass@db.example.com:3307/inventory"), {
+    host: "db.example.com",
     port: 3307,
     user: "user",
     password: "pass",
-    database: "REDACTED",
+    database: "inventory",
   });
 });
 
 test("parseDbUrl : mot de passe avec @ et :", () => {
-  const config = parseDbUrl("mysql://REDACTED:p@ss:wo:rd@db.example.com:3306/REDACTED");
-  assert.equal(config.user, "REDACTED");
+  const config = parseDbUrl("mysql://test_user:p@ss:wo:rd@db.internal.example.org:3306/inventory");
+  assert.equal(config.user, "test_user");
   assert.equal(config.password, "p@ss:wo:rd");
-  assert.equal(config.host, "db.example.com");
-  assert.equal(config.database, "REDACTED");
+  assert.equal(config.host, "db.internal.example.org");
+  assert.equal(config.database, "inventory");
 });
 
 test("parseDbUrl : % encodés sont décodés", () => {
